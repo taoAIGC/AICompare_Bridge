@@ -71,10 +71,26 @@ function readJson(req, limit = 1024 * 1024) {
   });
 }
 
+function parseRunnerPayload(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) throw new Error('Runner returned empty output');
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    const firstObject = text.indexOf('{');
+    if (firstObject >= 0) return JSON.parse(text.slice(firstObject));
+    throw new Error('Runner output was not valid JSON');
+  }
+}
+
 function runSearch(payload) {
   const runner = path.join(__dirname, 'runner.js');
   if (!fs.existsSync(runner)) throw new Error(`Runner is missing at ${runner}; reinstall AICompare WebBridge`);
-  const args = [runner, '--mode', 'gui', '--source', 'workbuddy', '--query', String(payload.query || '')];
+  // Keep the legacy OpenClaw trigger contract for older installed extensions.
+  // Newer extensions also understand this contract, while source/callback
+  // names can be overridden during compatibility testing.
+  const source = process.env.AICOMPARE_BRIDGE_SOURCE || 'openclaw';
+  const args = [runner, '--mode', 'gui', '--source', source, '--query', String(payload.query || '')];
   if (payload.sites) args.push('--sites', Array.isArray(payload.sites) ? payload.sites.join(',') : String(payload.sites));
   if (payload.timeout_ms) args.push('--wait-results-ms', String(payload.timeout_ms), '--timeout-ms', String(payload.timeout_ms));
   if (payload.extension_id) args.push('--extension-id', String(payload.extension_id));
@@ -87,7 +103,7 @@ function runSearch(payload) {
     child.on('error', reject);
     child.on('close', (code) => {
       try {
-        const parsed = JSON.parse(stdout.trim().split('\n').pop() || '{}');
+        const parsed = parseRunnerPayload(stdout);
         if (code !== 0 || parsed.ok === false) reject(new Error(parsed.error || stderr || `runner exited with ${code}`));
         else resolve(parsed);
       } catch (error) {

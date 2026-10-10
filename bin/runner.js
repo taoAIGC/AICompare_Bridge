@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 let chromiumInstance = null;
 
@@ -451,6 +451,25 @@ function openUrlInBrowser(url, browserApp) {
 
   if (platform === 'darwin') {
     const appName = browserApp || 'Google Chrome';
+    // LaunchServices can reject chrome-extension:// URLs with -10820. Starting
+    // Chrome's executable directly lets the already-running browser process
+    // receive and route the URL instead.
+    if (url.startsWith('chrome-extension://')) {
+      const appCandidates = [
+        browserApp && browserApp.includes('/') ? browserApp : '',
+        `/Applications/${appName}.app/Contents/MacOS/${appName}`,
+        `${os.homedir()}/Applications/${appName}.app/Contents/MacOS/${appName}`,
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+        '/Applications/Chromium.app/Contents/MacOS/Chromium'
+      ].filter(Boolean);
+      const executable = appCandidates.find((candidate) => fs.existsSync(candidate));
+      if (executable) {
+        const child = spawn(executable, [url], { detached: true, stdio: 'ignore' });
+        child.unref();
+        return;
+      }
+    }
     const args = ['-a', appName, url];
     const result = spawnSync('open', args, { stdio: 'ignore' });
     if (result.status !== 0) {
@@ -475,6 +494,20 @@ function openUrlInBrowser(url, browserApp) {
   const result = spawnSync(command, [url], { stdio: 'ignore' });
   if (result.status !== 0) {
     throw new Error(`Failed to open browser via ${command} (exit ${result.status || 'unknown'})`);
+  }
+}
+
+function parseRunnerPayload(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) throw new Error('Runner returned empty output');
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    const firstObject = text.indexOf('{');
+    if (firstObject >= 0) {
+      return JSON.parse(text.slice(firstObject));
+    }
+    throw new Error('Runner output was not valid JSON');
   }
 }
 
@@ -788,5 +821,6 @@ module.exports = {
   runGuiMode,
   tryOpenExtensionPage,
   resolveExtensionPage,
+  parseRunnerPayload,
   main
 };
