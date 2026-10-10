@@ -53,7 +53,8 @@ install_skill() {
 }
 
 if [ "$INSTALL_DAEMON" -eq 1 ] && [ -x "$BIN_DIR/webbridge.js" ] && command -v node >/dev/null 2>&1; then
-  node "$BIN_DIR/webbridge.js" stop >/dev/null 2>&1 || true
+  NODE_BIN="$(command -v node)"
+  env -u NODE_OPTIONS "$NODE_BIN" "$BIN_DIR/webbridge.js" stop >/dev/null 2>&1 || true
 fi
 
 mkdir -p "$BIN_DIR"
@@ -64,11 +65,15 @@ if [ "$INSTALL_DAEMON" -eq 1 ]; then
   curl -fsSL --retry 3 "${BASE}/runner.js" -o "$BIN_DIR/runner.js"
   chmod 700 "$BIN_DIR/runner.js"
   chmod 700 "$BIN_DIR/webbridge.js"
-  ln -sfn "$BIN_DIR/webbridge.js" "$BIN_DIR/aicompare-webbridge"
+  cat > "$BIN_DIR/aicompare-webbridge" <<EOF
+#!/usr/bin/env bash
+exec env -u NODE_OPTIONS "${NODE_BIN:-$(command -v node)}" "$BIN_DIR/webbridge.js" "\$@"
+EOF
+  chmod 700 "$BIN_DIR/aicompare-webbridge"
 fi
 if [ "$INSTALL_DAEMON" -eq 1 ]; then
   mkdir -p "$LINK_DIR"
-  ln -sfn "$BIN_DIR/webbridge.js" "$LINK_DIR/aicompare-webbridge"
+  ln -sfn "$BIN_DIR/aicompare-webbridge" "$LINK_DIR/aicompare-webbridge"
 fi
 
 if [ "$INSTALL_SKILL" -eq 1 ]; then
@@ -76,7 +81,8 @@ if [ "$INSTALL_SKILL" -eq 1 ]; then
 fi
 
 if [ "$INSTALL_DAEMON" -eq 1 ] && command -v node >/dev/null 2>&1; then
-  node "$BIN_DIR/webbridge.js" start >/dev/null 2>&1 || true
+  NODE_BIN="${NODE_BIN:-$(command -v node)}"
+  env -u NODE_OPTIONS "$NODE_BIN" "$BIN_DIR/webbridge.js" start >/dev/null 2>&1 || true
 elif [ "$INSTALL_DAEMON" -eq 1 ]; then
   echo "Node.js 20 or newer is required. Install it and rerun this command." >&2
   exit 1

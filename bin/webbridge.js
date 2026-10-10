@@ -13,6 +13,15 @@ const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
 const VERSION = '0.1.0';
 
+// Agent hosts may inject an obsolete Node preload through NODE_OPTIONS. Keep
+// the bridge and its runner isolated from that host-specific setting while
+// preserving all other environment configuration (extension id, token, etc.).
+function childEnvironment() {
+  const env = { ...process.env };
+  delete env.NODE_OPTIONS;
+  return env;
+}
+
 function splitAddr(value) {
   const match = String(value || DEFAULT_ADDR).match(/^(.*):(\d+)$/);
   if (!match) throw new Error(`Invalid listen address: ${value}`);
@@ -95,7 +104,10 @@ function runSearch(payload) {
   if (payload.timeout_ms) args.push('--wait-results-ms', String(payload.timeout_ms), '--timeout-ms', String(payload.timeout_ms));
   if (payload.extension_id) args.push('--extension-id', String(payload.extension_id));
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, args, {
+      env: childEnvironment(),
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
@@ -152,7 +164,11 @@ function createServer(addr) {
 function start(addrValue = DEFAULT_ADDR, foreground = false) {
   if (!foreground) {
     ensureStateDir();
-    const child = require('child_process').spawn(process.execPath, [__filename, 'start', '--foreground', '--addr', addrValue], { detached: true, stdio: 'ignore' });
+    const child = require('child_process').spawn(process.execPath, [__filename, 'start', '--foreground', '--addr', addrValue], {
+      detached: true,
+      env: childEnvironment(),
+      stdio: 'ignore'
+    });
     child.unref();
     process.stdout.write(`AICompare WebBridge starting on http://${addrValue}\n`);
     return;
