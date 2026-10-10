@@ -8,7 +8,7 @@
     "aicompare-webbridge": "bin/webbridge.js",
     "ai-compare": "bin/ai-compare.js"
   },
-  "files": ["bin", "skills", "references", "install.sh", "connector-meta.json", "cli.json", "icon.png", "README.md", "LICENSE"],
+  "files": ["bin/webbridge.js", "bin/runner.js", "bin/ai-compare.js", "bin/install-daemon.js", "skills", "install.sh", "README.md", "LICENSE"],
   "engines": { "node": ">=20" },
   "scripts": { "check": "node --check bin/webbridge.js && node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/install-daemon.js" }
 }

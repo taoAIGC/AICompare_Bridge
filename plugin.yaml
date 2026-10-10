@@ -1,8 +1,0 @@
-manifest_version: 1
-name: ai-compare-hard-router
-version: 0.1.0
-description: Reuses the AI Compare browser runner from AIBridge as a Hermes callable tool and search helper.
-provides_tools:
-  - ai_compare_search
-provides_hooks:
-  - pre_llm_call

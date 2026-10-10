@@ -1,5 +1,0 @@
-environment: production
-browser_app: Google Chrome
-timeout_ms: 190000
-# extension_id:
-# install_url:

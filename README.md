@@ -1,48 +1,77 @@
-# AICompare Bridge
+# AICompare Search Skill
 
-AICompare Bridge is the local daemon that lets WorkBuddy, Codex, OpenClaw, Hermes, and other Agent runtimes drive the AI Compare Chrome extension.
+An Agent-neutral Skill and local browser bridge for searching through the AICompare Chrome extension.
 
-## User installation
+The repository is intentionally not tied to WorkBuddy, Codex, OpenClaw, Hermes, Claude, or any other Agent product. Install this Skill with the Skill manager of the Agent you use. That manager chooses the correct global or project Skill directory.
 
-First install AI Compare in Chrome and sign in to the AI sites you want to use. Then run:
+## What it provides
+
+- `SKILL.md`: the portable Skill entry point when installing the whole repository
+- `skills/ai-compare-search/SKILL.md`: the same Skill for managers that require a nested Skill directory
+- `install.sh`: installs or updates the local Bridge for the current OS user
+- `bin/webbridge.js`: localhost daemon on `127.0.0.1:10087`
+- `bin/runner.js`: opens the AICompare extension and receives structured results
+- `bin/ai-compare.js`: direct CLI wrapper around the runner
+
+The Bridge uses the browser extension already installed in the user's Chrome profile. It does not contain or install an Agent-specific plugin.
+
+## Install the Skill
+
+Use the Agent's normal Skill installation flow and point it at this repository or at:
+
+```text
+skills/ai-compare-search/SKILL.md
+```
+
+Do not copy the Skill into a hard-coded Agent directory. The Agent should own that decision.
+
+## Install the Bridge
+
+Install AICompare in Chrome first, then sign in to the AI websites you want to query. Install the local Bridge with:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
-The installer downloads the bridge files from this repository, installs them under `~/.aicompare-webbridge/`, and starts a daemon listening only on `127.0.0.1:10087`. It deliberately does not write into any Agent-specific Skill directory. Install `skills/ai-compare-search/SKILL.md` through the Skill manager of the Agent you use; that manager chooses the correct global or project scope.
+The installer:
 
-The installer also isolates the bridge from an inherited `NODE_OPTIONS` value. This prevents an obsolete Node preload or broker shim from breaking the daemon before a search starts.
+1. Downloads the Bridge into `~/.aicompare-webbridge/`.
+2. Creates `~/.local/bin/aicompare-webbridge` when possible.
+3. Starts a daemon listening only on `127.0.0.1:10087`.
+4. Does not write to any Agent-specific Skill directory.
 
-The Skill itself checks for the Bridge and runs this same public installer on first use when needed:
+The installer isolates the Bridge from an inherited `NODE_OPTIONS` value, so an obsolete Node preload or broker shim cannot break startup. Use `--no-skill` as a harmless compatibility flag with older documentation; Skill installation is managed by the Agent Skill system.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
-```
-
-The installer accepts the legacy `--no-skill` flag as a compatibility no-op. Skill installation is intentionally delegated to the Agent's own Skill system.
-
-Important: most Agent runtimes do not execute arbitrary shell commands merely because a Skill file was installed. The Skill can request the Bridge installation on first use, but the Agent may ask the user for shell approval. Users can always run the CURL command directly.
-
-Check the daemon:
+## Verify and use
 
 ```bash
 aicompare-webbridge status
-```
-
-Run a browser comparison directly:
-
-```bash
 aicompare-webbridge search --query "你好世界" --sites "ChatGPT,Gemini"
 ```
 
-WorkBuddy Connector metadata and Skill are included in `connector-meta.json`, `cli.json`, and `skills/ai-compare-search/SKILL.md`.
+If `aicompare-webbridge` is not on `PATH`, use:
 
-## Development
+```bash
+$HOME/.local/bin/aicompare-webbridge status
+```
+
+The command returns JSON with per-site status and raw results. The Skill should preserve those site-level statuses, including login, rate-limit, blocked, and timeout states.
+
+## Requirements
+
+- macOS, Linux, or Windows with a compatible shell
+- Node.js 20 or newer
+- `curl`
+- AICompare installed in the same Chrome profile used for the search
+- The user already signed in to the selected AI websites
+
+## Development checks
 
 ```bash
 npm run check
-node bin/webbridge.js start --foreground
+bash -n install.sh
 ```
 
-The daemon uses the existing AI Compare browser runner and callback protocol, so the existing OpenClaw/Hermes adapters in this repository remain compatible.
+## License
+
+GPL-3.0-or-later. See [LICENSE](LICENSE).
