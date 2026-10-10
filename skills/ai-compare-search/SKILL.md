@@ -1,6 +1,8 @@
 ---
 name: ai-compare-search
 description: Search selected AI websites through the local AI Compare Chrome extension and return per-site raw results.
+scope: global
+install_scope: global
 ---
 
 # AI Compare Browser Search
