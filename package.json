@@ -1,26 +1,14 @@
 {
-  "name": "ai-compare-hard-router",
+  "name": "ai-compare-webbridge",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "files": [
-    "README.md",
-    "after-install.md",
-    "__init__.py",
-    "bin",
-    "config",
-    "config.yaml.example",
-    "docs",
-    "index.js",
-    "lib",
-    "openclaw.plugin.json",
-    "plugin.yaml",
-    "schemas.py",
-    "tools.py"
-  ],
-  "openclaw": {
-    "extensions": [
-      "./index.js"
-    ]
-  }
+  "description": "Local browser bridge for AI Compare and AI agent runtimes.",
+  "license": "GPL-3.0-or-later",
+  "type": "commonjs",
+  "bin": {
+    "aicompare-webbridge": "bin/webbridge.js",
+    "ai-compare": "bin/ai-compare.js"
+  },
+  "files": ["bin", "skills", "references", "install.sh", "connector-meta.json", "cli.json", "icon.png", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": { "check": "node --check bin/webbridge.js && node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/install-daemon.js" }
 }

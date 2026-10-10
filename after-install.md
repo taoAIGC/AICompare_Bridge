@@ -1,6 +1,6 @@
 # AI Compare Hermes Plugin
 
-This repository now installs as a Hermes plugin named `ai-compare-hard-router`.
+This repository now installs as a local AICompare Bridge daemon and continues to provide the Hermes plugin named `ai-compare-hard-router`.
 
 ## What you get
 
