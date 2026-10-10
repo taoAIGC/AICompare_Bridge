@@ -1,6 +1,6 @@
 # AI Compare Bridge Installation
 
-The one-line installer installs the local browser bridge and the `ai-compare-search` Skill. The Skill is marked `scope: global` and is installed for the current OS user, primarily at `~/.codex/skills/ai-compare-search/SKILL.md` and, when present, `~/.agents/skills/ai-compare-search/SKILL.md`. Existing user-level Skill directories for Claude, OpenClaw, or Hermes are updated as well.
+The one-line installer installs only the local browser bridge. Install `skills/ai-compare-search/SKILL.md` through the Agent Skill manager you use; the Agent chooses the correct global or project directory. The Bridge installer deliberately does not guess or write to directories belonging to specific Agent products.
 
 The Chrome extension is still a separate prerequisite: install it in the same Chrome profile that the bridge will open.
 
@@ -8,7 +8,7 @@ The Chrome extension is still a separate prerequisite: install it in the same Ch
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
-Use `--skill-only` to install or refresh only the Skill, or `--no-skill` to install only the bridge daemon.
+The Skill checks for the Bridge on first use and runs the public installer automatically when needed. The legacy `--no-skill` option remains accepted as a compatibility no-op.
 
 ## Hermes plugin compatibility
 

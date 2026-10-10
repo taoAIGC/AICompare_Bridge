@@ -10,13 +10,19 @@ First install AI Compare in Chrome and sign in to the AI sites you want to use. 
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
-The installer downloads the bridge files from this repository, installs them under `~/.aicompare-webbridge/`, starts a daemon listening only on `127.0.0.1:10087`, and installs the `ai-compare-search` Skill into the current user's global Codex/Agent Skill directories (`~/.codex/skills/ai-compare-search/` and, when present, `~/.agents/skills/ai-compare-search/`). If Claude, OpenClaw, or Hermes user-level Skill directories already exist, the same Skill is installed there too.
-
-The Skill frontmatter declares `scope: global`, so it is available to all projects for that OS user. This is user-global, not system-wide for every account on the computer.
+The installer downloads the bridge files from this repository, installs them under `~/.aicompare-webbridge/`, and starts a daemon listening only on `127.0.0.1:10087`. It deliberately does not write into any Agent-specific Skill directory. Install `skills/ai-compare-search/SKILL.md` through the Skill manager of the Agent you use; that manager chooses the correct global or project scope.
 
 The installer also isolates the bridge from an inherited `NODE_OPTIONS` value. This prevents an obsolete Node preload or broker shim from breaking the daemon before a search starts.
 
-To install only the Skill, use `--skill-only`. To skip Skill installation, use `--no-skill`. Set `AICOMPARE_SKILL_DIR` to use a custom global Skill directory.
+The Skill itself checks for the Bridge and runs this same public installer on first use when needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
+```
+
+The installer accepts the legacy `--no-skill` flag as a compatibility no-op. Skill installation is intentionally delegated to the Agent's own Skill system.
+
+Important: most Agent runtimes do not execute arbitrary shell commands merely because a Skill file was installed. The Skill can request the Bridge installation on first use, but the Agent may ask the user for shell approval. Users can always run the CURL command directly.
 
 Check the daemon:
 
