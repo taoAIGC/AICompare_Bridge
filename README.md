@@ -10,7 +10,7 @@ First install AI Compare in Chrome and sign in to the AI sites you want to use. 
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
-The installer downloads the bridge files from this repository, installs them under `~/.aicompare-webbridge/`, starts a daemon listening only on `127.0.0.1:10087`, and installs the `ai-compare-search` Skill into the current user's global Codex Skill directory (`~/.codex/skills/ai-compare-search/`). If Claude, OpenClaw, or Hermes user-level Skill directories already exist, the same Skill is installed there too.
+The installer downloads the bridge files from this repository, installs them under `~/.aicompare-webbridge/`, starts a daemon listening only on `127.0.0.1:10087`, and installs the `ai-compare-search` Skill into the current user's global Codex/Agent Skill directories (`~/.codex/skills/ai-compare-search/` and, when present, `~/.agents/skills/ai-compare-search/`). If Claude, OpenClaw, or Hermes user-level Skill directories already exist, the same Skill is installed there too.
 
 The Skill frontmatter declares `scope: global`, so it is available to all projects for that OS user. This is user-global, not system-wide for every account on the computer.
 

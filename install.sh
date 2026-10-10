@@ -39,7 +39,7 @@ install_skill() {
   # when their user-level skill directory already exists, avoiding creation of
   # runtime-specific directories that the user does not use.
   local targets=("${AICOMPARE_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills}")
-  for skill_dir in "$HOME/.claude/skills" "$HOME/.openclaw/skills" "$HOME/.hermes/skills"; do
+  for skill_dir in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.openclaw/skills" "$HOME/.hermes/skills"; do
     if [ -d "$skill_dir" ] && [[ ! " ${targets[*]} " =~ " ${skill_dir} " ]]; then
       targets+=("$skill_dir")
     fi
