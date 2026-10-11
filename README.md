@@ -17,6 +17,8 @@ The repository is intentionally not tied to WorkBuddy, Codex, OpenClaw, Hermes, 
 
 The Bridge uses the browser extension already installed in the user's Chrome profile. It does not contain or install an Agent-specific plugin.
 
+The callback receiver accepts both the legacy `openclaw_callback` route used by AICompare 4.4.x and the newer `bridge_callback` route. It also finishes when every requested site has a terminal result, even if an older extension reports that payload as progress rather than setting `completed: true`.
+
 ## Install the Skill
 
 Use the Agent's normal Skill installation flow and point it at this repository or at:
