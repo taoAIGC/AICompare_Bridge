@@ -1,6 +1,8 @@
 # AICompare Search Skill
 
-An Agent-neutral Skill and local browser bridge for searching through the AICompare Chrome extension.
+Query more than ten leading AI models at once and consolidate their results through the AICompare Chrome extension. Supported services include ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more.
+
+The Skill is free to use through the browser extension. Individual model login, quota, rate-limit, and provider policies still apply.
 
 The repository is intentionally not tied to WorkBuddy, Codex, OpenClaw, Hermes, Claude, or any other Agent product. Install this Skill with the Skill manager of the Agent you use. That manager chooses the correct global or project Skill directory.
 
@@ -27,7 +29,7 @@ Do not copy the Skill into a hard-coded Agent directory. The Agent should own th
 
 ## Install the Bridge
 
-Install AICompare in Chrome first, then sign in to the AI websites you want to query. Install the local Bridge with:
+Before using the Skill, install the “AI 比一比” browser extension in Chrome and sign in to the AI websites you want to query. Then install the local Bridge with:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash

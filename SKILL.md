@@ -1,11 +1,11 @@
 ---
 name: ai-compare-search
 version: 0.1.0
-display_name: AI 比一比搜索
+display_name: AI比一比搜索
 display_name_en: AICompare Search
-description: Search selected AI websites through the local AICompare Chrome extension and return per-site raw results.
-description_zh: 通过 AI 比一比浏览器插件搜索指定的 AI 网站，并返回各网站的原始结果。
-description_en: Search selected AI websites through the local AICompare browser extension and return raw results from each site.
+description: Query information from more than ten leading AI models at once and consolidate their results in one response. Supports ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more. Free to use through the browser extension; model login, quota, and provider policies still apply.
+description_zh: 同时从十多个主流大模型查询信息并汇总结果，支持 ChatGPT、Gemini、豆包、Grok、Claude、千问、DeepSeek、元宝等。通过浏览器插件免费使用，但各模型的登录、额度和服务规则仍然适用。使用前请先在 Chrome 浏览器安装“AI 比一比”浏览器插件。
+description_en: Query more than ten leading AI models at once and consolidate their results, including ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more. Free to use through the browser extension, subject to each model's login, quota, and provider policies. Install the AI Compare Chrome extension before use.
 ---
 
 # AICompare Search
