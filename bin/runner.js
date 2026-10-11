@@ -365,10 +365,17 @@ async function createCallbackServer(timeoutMs) {
   const token = crypto.randomBytes(16).toString('hex');
   const deferred = createDeferred();
   let lastPayload = null;
+  let callbackCount = 0;
+  let lastCallbackStatus = '';
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, 'http://127.0.0.1');
-    if (req.method !== 'POST' || requestUrl.pathname !== `/openclaw-callback/${token}`) {
+    const acceptedPaths = new Set([
+      `/openclaw-callback/${token}`,
+      `/bridge-callback/${token}`
+    ]);
+    if (req.method !== 'POST' || !acceptedPaths.has(requestUrl.pathname)) {
       res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
       res.end('not found');
       return;
     }
@@ -388,6 +395,8 @@ async function createCallbackServer(timeoutMs) {
       try {
         const payload = JSON.parse(body || '{}');
         lastPayload = payload;
+        callbackCount += 1;
+        lastCallbackStatus = payload && payload.completed === true ? 'final' : 'progress';
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
@@ -418,13 +427,18 @@ async function createCallbackServer(timeoutMs) {
   const address = server.address();
   const port = address && typeof address === 'object' ? address.port : 0;
   const callbackUrl = `http://127.0.0.1:${port}/openclaw-callback/${token}`;
+  const bridgeCallbackUrl = `http://127.0.0.1:${port}/bridge-callback/${token}`;
   const timer = setTimeout(() => {
-    deferred.reject(new Error(buildGuiCallbackTimeoutError(timeoutMs, lastPayload)));
+    const details = callbackCount > 0
+      ? ` Received ${callbackCount} callback(s); last callback was ${lastCallbackStatus || 'unknown'} rather than final.`
+      : ' No callback reached the local Bridge callback server.';
+    deferred.reject(new Error(`${buildGuiCallbackTimeoutError(timeoutMs, lastPayload)}${details}`));
   }, timeoutMs + 10000);
 
   let closed = false;
   return {
     callbackUrl,
+    bridgeCallbackUrl,
     async waitForPayload() {
       try {
         return await deferred.promise;
@@ -535,13 +549,12 @@ async function runGuiMode(args, query, sites) {
   const shouldReadBack = openBrowser && !openOnly;
   const callbackServer = shouldReadBack ? await createCallbackServer(waitResultsMs) : null;
   const callbackParams = callbackServer
-    ? (source === 'workbuddy'
-      ? { bridge_callback: callbackServer.callbackUrl }
-      : {
-        // Existing callers still receive the original OpenClaw parameter.
-        openclaw_callback: callbackServer.callbackUrl,
-        bridge_callback: callbackServer.callbackUrl
-      })
+    ? {
+      // v4.4.18 uses openclaw_callback; newer builds also accept
+      // bridge_callback. Both names must reach this local callback server.
+      openclaw_callback: callbackServer.callbackUrl,
+      bridge_callback: callbackServer.bridgeCallbackUrl
+    }
     : {};
   const triggerUrl = buildExtensionUrl(
     extensionId,
