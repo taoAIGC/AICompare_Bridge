@@ -367,6 +367,16 @@ async function createCallbackServer(timeoutMs) {
   let lastPayload = null;
   let callbackCount = 0;
   let lastCallbackStatus = '';
+  const setCorsHeaders = (req, res) => {
+    const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim()
+      ? req.headers.origin
+      : '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  };
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, 'http://127.0.0.1');
     const acceptedPaths = new Set([
@@ -377,18 +387,14 @@ async function createCallbackServer(timeoutMs) {
     ]);
     if (req.method === 'OPTIONS' && acceptedPaths.has(requestUrl.pathname)) {
       res.statusCode = 204;
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      setCorsHeaders(req, res);
       res.setHeader('Access-Control-Max-Age', '600');
       res.end();
       return;
     }
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      setCorsHeaders(req, res);
       res.end();
       return;
     }
@@ -417,7 +423,7 @@ async function createCallbackServer(timeoutMs) {
         callbackCount += 1;
         lastCallbackStatus = payload && payload.completed === true ? 'final' : 'progress';
         res.statusCode = 200;
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        setCorsHeaders(req, res);
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
         const isFinal = payload && typeof payload === 'object' && (
