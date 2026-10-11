@@ -1,6 +1,11 @@
 ---
 name: ai-compare-search
+version: 0.1.0
+display_name: AI 比一比搜索
+display_name_en: AICompare Search
 description: Search selected AI websites through the local AICompare Chrome extension and return per-site raw results.
+description_zh: 通过 AI 比一比浏览器插件搜索指定的 AI 网站，并返回各网站的原始结果。
+description_en: Search selected AI websites through the local AICompare browser extension and return raw results from each site.
 ---
 
 # AICompare Search
