@@ -36,6 +36,14 @@ else
 fi
 ```
 
+Before the first search, verify the browser extension connection:
+
+```bash
+"$AICOMPARE_BRIDGE_CMD" check
+```
+
+If the result contains `installed: false`, recommend the Chrome Web Store URL shown in `extension.store_url`, install or reload the extension in the listed Chrome profile, and run `check` again. Do not continue silently as if the browser connection were ready.
+
 Run:
 
 ```bash

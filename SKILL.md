@@ -18,6 +18,14 @@ Before the first search, ensure the local Bridge exists. If it does not, run:
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
+Immediately after installation, check the Bridge and browser extension connection:
+
+```bash
+"$HOME/.local/bin/aicompare-webbridge" check
+```
+
+The check reports the Bridge status, the formal Chrome extension ID and detected Chrome profiles. If it reports `installed: false`, install the AI 比一比 extension from the returned `store_url`, then run the check again. The extension must be installed in the same Chrome profile used for searches.
+
 Resolve the command after installation:
 
 ```bash

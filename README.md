@@ -50,8 +50,11 @@ The installer isolates the Bridge from an inherited `NODE_OPTIONS` value, so an 
 
 ```bash
 aicompare-webbridge status
+aicompare-webbridge check
 aicompare-webbridge search --query "你好世界" --sites "ChatGPT,Gemini"
 ```
+
+`check` verifies the local Bridge and scans the regular Chrome/Chromium profiles for the formal AI Compare extension (`dkhpgbbhlnmjbkihoeniojpkggkabbbl`). If the extension is not found, its JSON output includes the Chrome Web Store URL to install it. Install the extension in the same Chrome profile used for searches, then run `check` again.
 
 If `aicompare-webbridge` is not on `PATH`, use:
 

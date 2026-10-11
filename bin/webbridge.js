@@ -13,6 +13,8 @@ const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
 const VERSION = '0.1.0';
 const MAX_TASKS = 100;
+const DEFAULT_EXTENSION_ID = 'dkhpgbbhlnmjbkihoeniojpkggkabbbl';
+const DEFAULT_EXTENSION_URL = 'https://chromewebstore.google.com/detail/dkhpgbbhlnmjbkihoeniojpkggkabbbl';
 
 // Agent hosts may inject an obsolete Node preload through NODE_OPTIONS. Keep
 // the bridge and its runner isolated from that host-specific setting while
@@ -213,6 +215,53 @@ function requestJson(method, pathName, payload) {
   });
 }
 
+function chromeExtensionInstallations(extensionId = DEFAULT_EXTENSION_ID) {
+  const home = os.homedir();
+  const roots = process.platform === 'darwin'
+    ? [path.join(home, 'Library/Application Support/Google/Chrome'), path.join(home, 'Library/Application Support/Chromium'), path.join(home, 'Library/Application Support/Microsoft Edge')]
+    : process.platform === 'win32'
+      ? [path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data'), path.join(process.env.LOCALAPPDATA || '', 'Chromium/User Data'), path.join(process.env.LOCALAPPDATA || '', 'Microsoft/Edge/User Data')]
+      : [path.join(home, '.config/google-chrome'), path.join(home, '.config/chromium'), path.join(home, '.config/microsoft-edge')];
+  const found = [];
+  for (const root of roots) {
+    let profiles = [];
+    try {
+      profiles = fs.readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).filter((name) => name === 'Default' || /^Profile \d+$/i.test(name));
+    } catch (_) { continue; }
+    for (const profile of profiles) {
+      const extensionRoot = path.join(root, profile, 'Extensions', extensionId);
+      let versions = [];
+      try { versions = fs.readdirSync(extensionRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name); } catch (_) { continue; }
+      for (const version of versions) {
+        let manifest = {};
+        try { manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, version, 'manifest.json'), 'utf8')); } catch (_) {}
+        found.push({ browser: path.basename(root), profile, version: manifest.version || version, name: manifest.name || 'AI Compare' });
+      }
+    }
+  }
+  return found;
+}
+
+function check() {
+  const installations = chromeExtensionInstallations();
+  return requestJson('GET', '/status').then((status) => {
+    const payload = {
+      ok: true,
+      bridge: { running: status.running === true, version: VERSION, port: status.port },
+      extension: {
+        id: DEFAULT_EXTENSION_ID,
+        installed: installations.length > 0,
+        installations,
+        store_url: DEFAULT_EXTENSION_URL
+      },
+      next: installations.length > 0
+        ? '插件已安装。请确保 Chrome 使用的是列出的配置文件，并登录要查询的 AI 网站。'
+        : `未检测到正式版插件，请安装：${DEFAULT_EXTENSION_URL}`
+    };
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  });
+}
+
 async function search(args) {
   const queryIndex = args.indexOf('--query');
   const query = queryIndex >= 0 ? args[queryIndex + 1] : '';
@@ -240,6 +289,7 @@ async function cli() {
     return require('http').get(`http://${addr.host}:${addr.port}/status`, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => { process.stdout.write(`${b}\n`); }); }).on('error', () => { process.stdout.write(JSON.stringify({ ok: false, running: false }) + '\n'); process.exitCode = 1; });
   }
   if (command === 'stop') { const pid = readPid(); if (pid) process.kill(pid, 'SIGTERM'); return; }
+  if (command === 'check') return check();
   if (command === 'search') return search(rest);
   process.stdout.write('Usage: aicompare-webbridge start [--foreground] [--addr 127.0.0.1:10087]\n');
 }
