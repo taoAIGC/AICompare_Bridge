@@ -12,6 +12,7 @@ const STATE_DIR = process.env.AICOMPARE_BRIDGE_HOME || path.join(os.homedir(), '
 const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
 const VERSION = '0.1.0';
+const MAX_TASKS = 100;
 
 // Agent hosts may inject an obsolete Node preload through NODE_OPTIONS. Keep
 // the bridge and its runner isolated from that host-specific setting while
@@ -44,6 +45,13 @@ function readPid() {
 function logLine(message) {
   ensureStateDir();
   fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${message}\n`);
+}
+
+function trimTasks(tasks) {
+  while (tasks.size > MAX_TASKS) {
+    const oldestTaskId = tasks.keys().next().value;
+    tasks.delete(oldestTaskId);
+  }
 }
 
 function json(res, status, payload) {
@@ -142,11 +150,14 @@ function createServer(addr) {
         if (!String(payload.query || '').trim()) return json(res, 400, { ok: false, error: 'query is required' });
         const taskId = `task_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
         tasks.set(taskId, { taskId, status: 'running', createdAt: new Date().toISOString() });
+        trimTasks(tasks);
         active += 1;
         runSearch(payload).then((result) => {
           tasks.set(taskId, { taskId, status: 'completed', completedAt: new Date().toISOString(), result });
         }).catch((error) => {
-          tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: error.message });
+          const message = error && error.message ? error.message : String(error);
+          logLine(`task ${taskId} failed: ${message}`);
+          tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: message });
         }).finally(() => { active -= 1; });
         return json(res, 202, { ok: true, task_id: taskId, status: 'running', status_url: `/tasks/${taskId}` });
       } catch (error) { return json(res, 400, { ok: false, error: error.message }); }
