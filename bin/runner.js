@@ -365,42 +365,10 @@ async function createCallbackServer(timeoutMs) {
   const token = crypto.randomBytes(16).toString('hex');
   const deferred = createDeferred();
   let lastPayload = null;
-  let callbackCount = 0;
-  let lastCallbackStatus = '';
-  const setCorsHeaders = (req, res) => {
-    const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim()
-      ? req.headers.origin
-      : '*';
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  };
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, 'http://127.0.0.1');
-    const acceptedPaths = new Set([
-      `/openclaw-callback/${token}`,
-      `/openclaw-callback/${token}/`,
-      `/bridge-callback/${token}`,
-      `/bridge-callback/${token}/`
-    ]);
-    if (req.method === 'OPTIONS' && acceptedPaths.has(requestUrl.pathname)) {
-      res.statusCode = 204;
-      setCorsHeaders(req, res);
-      res.setHeader('Access-Control-Max-Age', '600');
-      res.end();
-      return;
-    }
-    if (req.method === 'OPTIONS') {
-      res.statusCode = 204;
-      setCorsHeaders(req, res);
-      res.end();
-      return;
-    }
-    if (req.method !== 'POST' || !acceptedPaths.has(requestUrl.pathname)) {
+    if (req.method !== 'POST' || requestUrl.pathname !== `/openclaw-callback/${token}`) {
       res.statusCode = 404;
-      res.setHeader('Content-Type', 'application/json');
       res.end('not found');
       return;
     }
@@ -420,10 +388,7 @@ async function createCallbackServer(timeoutMs) {
       try {
         const payload = JSON.parse(body || '{}');
         lastPayload = payload;
-        callbackCount += 1;
-        lastCallbackStatus = payload && payload.completed === true ? 'final' : 'progress';
         res.statusCode = 200;
-        setCorsHeaders(req, res);
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
         const isFinal = payload && typeof payload === 'object' && (
@@ -453,18 +418,13 @@ async function createCallbackServer(timeoutMs) {
   const address = server.address();
   const port = address && typeof address === 'object' ? address.port : 0;
   const callbackUrl = `http://127.0.0.1:${port}/openclaw-callback/${token}`;
-  const bridgeCallbackUrl = `http://127.0.0.1:${port}/bridge-callback/${token}`;
   const timer = setTimeout(() => {
-    const details = callbackCount > 0
-      ? ` Received ${callbackCount} callback(s); last callback was ${lastCallbackStatus || 'unknown'} rather than final.`
-      : ' No callback reached the local Bridge callback server.';
-    deferred.reject(new Error(`${buildGuiCallbackTimeoutError(timeoutMs, lastPayload)}${details}`));
+    deferred.reject(new Error(buildGuiCallbackTimeoutError(timeoutMs, lastPayload)));
   }, timeoutMs + 10000);
 
   let closed = false;
   return {
     callbackUrl,
-    bridgeCallbackUrl,
     async waitForPayload() {
       try {
         return await deferred.promise;
@@ -575,12 +535,13 @@ async function runGuiMode(args, query, sites) {
   const shouldReadBack = openBrowser && !openOnly;
   const callbackServer = shouldReadBack ? await createCallbackServer(waitResultsMs) : null;
   const callbackParams = callbackServer
-    ? {
-      // Keep both parameter names on the exact same legacy endpoint. AI
-      // Compare 4.4.18 may prefer bridge_callback when both are present.
-      openclaw_callback: callbackServer.callbackUrl,
-      bridge_callback: callbackServer.callbackUrl
-    }
+    ? (source === 'workbuddy'
+      ? { bridge_callback: callbackServer.callbackUrl }
+      : {
+        // Existing callers still receive the original OpenClaw parameter.
+        openclaw_callback: callbackServer.callbackUrl,
+        bridge_callback: callbackServer.callbackUrl
+      })
     : {};
   const triggerUrl = buildExtensionUrl(
     extensionId,
