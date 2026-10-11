@@ -576,10 +576,10 @@ async function runGuiMode(args, query, sites) {
   const callbackServer = shouldReadBack ? await createCallbackServer(waitResultsMs) : null;
   const callbackParams = callbackServer
     ? {
-      // v4.4.18 uses openclaw_callback; newer builds also accept
-      // bridge_callback. Both names must reach this local callback server.
+      // Keep both parameter names on the exact same legacy endpoint. AI
+      // Compare 4.4.18 may prefer bridge_callback when both are present.
       openclaw_callback: callbackServer.callbackUrl,
-      bridge_callback: callbackServer.bridgeCallbackUrl
+      bridge_callback: callbackServer.callbackUrl
     }
     : {};
   const triggerUrl = buildExtensionUrl(
