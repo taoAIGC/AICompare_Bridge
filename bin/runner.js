@@ -371,8 +371,27 @@ async function createCallbackServer(timeoutMs) {
     const requestUrl = new URL(req.url, 'http://127.0.0.1');
     const acceptedPaths = new Set([
       `/openclaw-callback/${token}`,
-      `/bridge-callback/${token}`
+      `/openclaw-callback/${token}/`,
+      `/bridge-callback/${token}`,
+      `/bridge-callback/${token}/`
     ]);
+    if (req.method === 'OPTIONS' && acceptedPaths.has(requestUrl.pathname)) {
+      res.statusCode = 204;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Max-Age', '600');
+      res.end();
+      return;
+    }
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.end();
+      return;
+    }
     if (req.method !== 'POST' || !acceptedPaths.has(requestUrl.pathname)) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'application/json');
@@ -398,6 +417,7 @@ async function createCallbackServer(timeoutMs) {
         callbackCount += 1;
         lastCallbackStatus = payload && payload.completed === true ? 'final' : 'progress';
         res.statusCode = 200;
+        res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
         const isFinal = payload && typeof payload === 'object' && (
