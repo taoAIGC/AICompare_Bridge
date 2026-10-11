@@ -1,8 +1,8 @@
 ---
 name: ai-compare-search
 version: 0.1.0
-display_name: AI比一比搜索
-display_name_en: AICompare Search
+display_name: 多AI 对比查询
+display_name_en: Multi-AI Comparison Search
 description: Query information from more than ten leading AI models at once and consolidate their results in one response. Supports ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more. Free to use through the browser extension; model login, quota, and provider policies still apply.
 description_zh: 同时从十多个主流大模型查询信息并汇总结果，支持 ChatGPT、Gemini、豆包、Grok、Claude、千问、DeepSeek、元宝等。通过浏览器插件免费使用，但各模型的登录、额度和服务规则仍然适用。使用前请先在 Chrome 浏览器安装“AI 比一比”浏览器插件。
 description_en: Query more than ten leading AI models at once and consolidate their results, including ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more. Free to use through the browser extension, subject to each model's login, quota, and provider policies. Install the AI Compare Chrome extension before use.

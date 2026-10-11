@@ -1,4 +1,4 @@
-# AICompare Search Skill
+# 多AI 对比查询 Skill
 
 Query more than ten leading AI models at once and consolidate their results through the AICompare Chrome extension. Supported services include ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more.
 
