@@ -66,6 +66,8 @@ The command returns JSON with per-site status and raw results. The Skill should 
 
 By default, the Skill displays each model's returned content and status directly. It does not analyze, summarize, compare, merge, or rewrite results unless the user explicitly requests that.
 
+The Bridge waits for successful streaming answers to become usable and stable before returning them. A successful site must provide at least 20 characters and report a final/ready state or two stable rounds; an additional 8-second quiet window prevents early partial answers from being sent while the model is still generating. Explicit failure statuses can be returned immediately.
+
 ## Requirements
 
 - macOS, Linux, or Windows with a compatible shell

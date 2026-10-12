@@ -388,12 +388,28 @@ function hasResolvedAllSites(payload) {
   ));
 }
 
+function hasUsableStableResults(payload) {
+  const result = payload && payload.result;
+  if (!hasResolvedAllSites(payload)) return false;
+  return result.results.slice(0, Number(result.totalSites)).every((site) => {
+    const status = String(site.status || '').toLowerCase();
+    if (status !== 'ok') return true;
+    const content = String(site.content || '').trim();
+    if (content.length < 20) return false;
+    const phase = String(site.runtimePhase || '').toLowerCase();
+    return phase !== 'submitted' && phase !== 'waiting_response';
+  });
+}
+
 async function createCallbackServer(timeoutMs) {
   const token = crypto.randomBytes(16).toString('hex');
   const deferred = createDeferred();
   let lastPayload = null;
   let callbackCount = 0;
   let lastCallbackStatus = '';
+  let stableCandidateTimer = null;
+  let stableCandidateKey = '';
+  const stableWindowMs = 8000;
   const setCorsHeaders = (req, res) => {
     const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim()
       ? req.headers.origin
@@ -455,12 +471,30 @@ async function createCallbackServer(timeoutMs) {
         res.end(JSON.stringify({ ok: true }));
         const isFinal = payload && typeof payload === 'object' && (
           payload.ok === false
-          || payload.completed === true
           || (payload.result && payload.result.finished === true)
-          || hasResolvedAllSites(payload)
         );
-        if (isFinal) {
+        const allSitesResolved = hasResolvedAllSites(payload);
+        const immediateFailure = allSitesResolved && payload.result.results.every((site) => site && String(site.status || '').toLowerCase() !== 'ok');
+        const stableResults = hasUsableStableResults(payload);
+        if (isFinal || immediateFailure) {
+          if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
+          stableCandidateTimer = null;
           deferred.resolve(payload);
+        } else if (stableResults) {
+          const key = JSON.stringify(payload.result.results.map((site) => ({
+            siteName: site.siteName,
+            status: site.status,
+            content: site.content,
+            url: site.url
+          })));
+          if (key !== stableCandidateKey) {
+            stableCandidateKey = key;
+            if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
+            stableCandidateTimer = setTimeout(() => {
+              stableCandidateTimer = null;
+              deferred.resolve(lastPayload);
+            }, stableWindowMs);
+          }
         }
       } catch (error) {
         res.statusCode = 400;
@@ -498,6 +532,7 @@ async function createCallbackServer(timeoutMs) {
         return await deferred.promise;
       } finally {
         clearTimeout(timer);
+        if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
         if (!closed) {
           closed = true;
           await new Promise((resolve) => server.close(() => resolve()));
