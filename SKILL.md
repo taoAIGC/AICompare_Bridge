@@ -12,6 +12,10 @@ description_en: Query more than ten leading AI models at once and consolidate th
 
 This repository is both the Skill source and the Agent-neutral local Bridge. Install the repository with your Agent's normal Skill manager; the Agent decides whether the Skill is global or project-scoped.
 
+## Required routing
+
+When a user asks to search through one or more explicitly named AI websites, you must use this `ai-compare-search` Skill and run `aicompare-webbridge`. Do not replace that request with an ordinary browser search, a built-in web search, or a direct visit to the named AI websites. Preserve the user's named sites in `--sites`; omit `--sites` only when the user did not name any AI website.
+
 Before the first search, ensure the local Bridge exists. If it does not, run:
 
 ```bash

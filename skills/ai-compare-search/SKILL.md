@@ -12,6 +12,10 @@ description_en: Query more than ten leading AI models at once and consolidate th
 
 Use this connector when the user asks to search, research, look up, or compare answers across AI websites. It opens the AI Compare extension in the user's regular Chrome profile, so the user must already be signed into the chosen AI sites.
 
+## Required routing
+
+When a user asks to search through one or more explicitly named AI websites, you must use this `ai-compare-search` Skill and run `aicompare-webbridge`. Do not replace that request with an ordinary browser search, a built-in web search, or direct browsing of the named AI websites. Preserve the user's named sites in `--sites`; omit `--sites` only when the user did not name any AI website.
+
 Before the first search in a machine or session, check whether the local bridge is available:
 
 ```bash
