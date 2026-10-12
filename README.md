@@ -1,88 +1,53 @@
-# 多AI 对比查询 Skill
+# AICompare Cli
 
-Query more than ten leading AI models at once and consolidate their results through the AICompare Chrome extension. Supported services include ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more.
+AICompare Cli is the single shared browser bridge for WorkBuddy, OpenClaw, Hermes, and other local Agent runtimes. It opens AI Compare in the user's existing Chrome profile and waits for structured per-site results on a localhost callback.
 
-The Skill is free to use through the browser extension. Individual model login, quota, rate-limit, and provider policies still apply.
+The package is intentionally agent-neutral. Agent adapters select their caller identity with `--source`; users do not need separate folders for each Agent.
 
-The repository is intentionally not tied to WorkBuddy, Codex, OpenClaw, Hermes, Claude, or any other Agent product. Install this Skill with the Skill manager of the Agent you use. That manager chooses the correct global or project Skill directory.
+## Install
 
-## What it provides
-
-- `SKILL.md`: the portable Skill entry point when installing the whole repository
-- `skills/ai-compare-search/SKILL.md`: the same Skill for managers that require a nested Skill directory
-- `install.sh`: installs or updates the local Bridge for the current OS user
-- `bin/webbridge.js`: localhost daemon on `127.0.0.1:10087`
-- `bin/runner.js`: opens the AICompare extension and receives structured results
-- `bin/ai-compare.js`: direct CLI wrapper around the runner
-
-The Bridge uses the browser extension already installed in the user's Chrome profile. It does not contain or install an Agent-specific plugin.
-
-The callback receiver accepts both the legacy `openclaw_callback` route used by AICompare 4.4.x and the newer `bridge_callback` route. It also finishes when every requested site has a terminal result, even if an older extension reports that payload as progress rather than setting `completed: true`.
-
-## Install the Skill
-
-Use the Agent's normal Skill installation flow and point it at this repository or at:
-
-```text
-skills/ai-compare-search/SKILL.md
+```bash
+npm install -g ai-compare-cli
 ```
 
-Do not copy the Skill into a hard-coded Agent directory. The Agent should own that decision.
+Install AI Compare in the same Chrome profile and sign in to the AI sites you plan to use. The Chrome Web Store extension id is `dkhpgbbhlnmjbkihoeniojpkggkabbbl`.
 
-## Install the Bridge
-
-Before using the Skill, install the “AI 比一比” browser extension in Chrome and sign in to the AI websites you want to query. Then install the local Bridge with:
+Install the local WebBridge daemon from GitHub:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taoAIGC/AICompare_Bridge/main/install.sh | bash
 ```
 
-The installer:
+The daemon listens only on `127.0.0.1:10087` and does not require an external domain.
 
-1. Downloads the Bridge into `~/.aicompare-webbridge/`.
-2. Creates `~/.local/bin/aicompare-webbridge` when possible.
-3. Starts a daemon listening only on `127.0.0.1:10087`.
-4. Does not write to any Agent-specific Skill directory.
+The GitHub URL is intentionally pinned to the bridge repository's `main` branch. For production, publish a GitHub Release and change `AICOMPARE_GITHUB_REF` to a release tag so installation is not affected by future source changes.
 
-The installer isolates the Bridge from an inherited `NODE_OPTIONS` value, so an obsolete Node preload or broker shim cannot break startup. Use `--no-skill` as a harmless compatibility flag with older documentation; Skill installation is managed by the Agent Skill system.
+## Development verification
 
-## Verify and use
+Load this repository as an unpacked Chrome extension, then run:
 
 ```bash
-aicompare-webbridge status
-aicompare-webbridge check
+ai-compare --mode gui --source workbuddy --query "你好世界" --sites "ChatGPT,Gemini"
+```
+
+For OpenClaw or Hermes compatibility, use the same command with `--source openclaw`. The opened extension URL uses `source=<caller>` and `bridge_callback`; legacy OpenClaw parameters remain supported.
+
+For WorkBuddy/Codex, use the daemon command:
+
+```bash
 aicompare-webbridge search --query "你好世界" --sites "ChatGPT,Gemini"
 ```
 
-`check` verifies the local Bridge and scans the regular Chrome/Chromium profiles for the formal AI Compare extension (`dkhpgbbhlnmjbkihoeniojpkggkabbbl`). If the extension is not found, its JSON output includes the Chrome Web Store URL to install it. Install the extension in the same Chrome profile used for searches, then run `check` again.
+## Packaging note
 
-If `aicompare-webbridge` is not on `PATH`, use:
+The WorkBuddy Connector assets are `connector-meta.json`, `cli.json`, `skills/`, and `icon.png`. They are packaged with the npm CLI. Before submitting to the WorkBuddy Connector market, publish the npm package and then upload this directory as the Connector asset bundle.
 
-```bash
-$HOME/.local/bin/aicompare-webbridge status
-```
-
-The command returns JSON with per-site status and raw results. The Skill should preserve those site-level statuses, including login, rate-limit, blocked, and timeout states.
-
-By default, the Skill displays each model's returned content and status directly. It does not analyze, summarize, compare, merge, or rewrite results unless the user explicitly requests that.
-
-The Bridge waits for successful streaming answers to become usable and stable before returning them. A successful site must provide at least 20 characters and report a final/ready state or two stable rounds; an additional 8-second quiet window prevents early partial answers from being sent while the model is still generating. Explicit failure statuses can be returned immediately.
-
-## Requirements
-
-- macOS, Linux, or Windows with a compatible shell
-- Node.js 20 or newer
-- `curl`
-- AICompare installed in the same Chrome profile used for the search
-- The user already signed in to the selected AI websites
-
-## Development checks
+## Publish
 
 ```bash
-npm run check
-bash -n install.sh
+cd "AICompare Cli"
+npm login
+npm publish --access public
 ```
 
-## License
-
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+The package name is `ai-compare-cli`. It was available on npm during packaging; publish promptly because an availability check does not reserve the name.

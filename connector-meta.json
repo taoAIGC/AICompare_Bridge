@@ -1,0 +1,21 @@
+{
+  "name": "AI Compare Browser Search",
+  "name_zh": "AI 比一比浏览器搜索",
+  "name_en": "AI Compare Browser Search",
+  "description": "Run a query through the local AI Compare browser extension and return raw answers from selected AI sites.",
+  "description_zh": "通过本机 AI 比一比 WebBridge 驱动浏览器扩展并行搜索，并返回指定 AI 站点的原始回答。",
+  "description_en": "Run a query through the local AI Compare browser extension and return raw answers from selected AI sites.",
+  "source": "ai-compare-browser-search",
+  "type": "cli",
+  "version": "0.1.0",
+  "minWorkbuddyVersion": "5.0.0",
+  "icon": "icon.png",
+  "examples_zh": [
+    "搜索 OpenAI 最新产品动态，分别查看 ChatGPT、Claude 和 Gemini 的原始回答",
+    "比较 ChatGPT 和 Gemini 对 RAG 评测方法的建议，不要先总结"
+  ],
+  "examples_en": [
+    "Search for recent OpenAI product updates and return raw answers from ChatGPT, Claude, and Gemini",
+    "Compare ChatGPT and Gemini recommendations for evaluating RAG without summarizing first"
+  ]
+}

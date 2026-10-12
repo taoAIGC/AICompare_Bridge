@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 let chromiumInstance = null;
 
@@ -361,9 +361,9 @@ function createDeferred() {
   return { promise, resolve, reject };
 }
 
-// A 4.4.x extension can send the complete site set as a progress callback
-// without setting payload.completed. Treat that payload as final so the
-// bridge does not wait for the extension's own UI timeout.
+// Older extension builds may report all site results in a progress callback
+// without setting payload.completed. The bridge can finish as soon as every
+// requested site has a terminal status.
 function hasResolvedAllSites(payload) {
   const result = payload && payload.result;
   if (!result || typeof result !== 'object') return false;
@@ -372,78 +372,23 @@ function hasResolvedAllSites(payload) {
   if (!Number.isFinite(totalSites) || totalSites <= 0) return false;
   if (!Number.isFinite(resolvedSites) || resolvedSites < totalSites) return false;
   if (!Array.isArray(result.results) || result.results.length < totalSites) return false;
-
   const terminalStatuses = new Set([
-    'ok',
-    'error',
-    'rate_limited',
-    'login_required',
-    'blocked',
-    'landing_page',
-    'not_submitted',
-    'timeout'
+    'ok', 'error', 'rate_limited', 'login_required', 'blocked',
+    'landing_page', 'not_submitted', 'timeout'
   ]);
   return result.results.slice(0, totalSites).every((site) => (
     site && terminalStatuses.has(String(site.status || '').toLowerCase())
   ));
 }
 
-function hasUsableStableResults(payload) {
-  const result = payload && payload.result;
-  if (!hasResolvedAllSites(payload)) return false;
-  return result.results.slice(0, Number(result.totalSites)).every((site) => {
-    const status = String(site.status || '').toLowerCase();
-    if (status !== 'ok') return true;
-    const content = String(site.content || '').trim();
-    if (content.length < 20) return false;
-    const phase = String(site.runtimePhase || '').toLowerCase();
-    return phase !== 'submitted' && phase !== 'waiting_response';
-  });
-}
-
 async function createCallbackServer(timeoutMs) {
   const token = crypto.randomBytes(16).toString('hex');
   const deferred = createDeferred();
   let lastPayload = null;
-  let callbackCount = 0;
-  let lastCallbackStatus = '';
-  let stableCandidateTimer = null;
-  let stableCandidateKey = '';
-  const stableWindowMs = 8000;
-  const setCorsHeaders = (req, res) => {
-    const origin = typeof req.headers.origin === 'string' && req.headers.origin.trim()
-      ? req.headers.origin
-      : '*';
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  };
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, 'http://127.0.0.1');
-    const acceptedPaths = new Set([
-      `/openclaw-callback/${token}`,
-      `/openclaw-callback/${token}/`,
-      `/bridge-callback/${token}`,
-      `/bridge-callback/${token}/`
-    ]);
-    if (req.method === 'OPTIONS' && acceptedPaths.has(requestUrl.pathname)) {
-      res.statusCode = 204;
-      setCorsHeaders(req, res);
-      res.setHeader('Access-Control-Max-Age', '600');
-      res.end();
-      return;
-    }
-    if (req.method === 'OPTIONS') {
-      res.statusCode = 204;
-      setCorsHeaders(req, res);
-      res.end();
-      return;
-    }
-    if (req.method !== 'POST' || !acceptedPaths.has(requestUrl.pathname)) {
+    if (req.method !== 'POST' || requestUrl.pathname !== `/openclaw-callback/${token}`) {
       res.statusCode = 404;
-      res.setHeader('Content-Type', 'application/json');
       res.end('not found');
       return;
     }
@@ -463,38 +408,17 @@ async function createCallbackServer(timeoutMs) {
       try {
         const payload = JSON.parse(body || '{}');
         lastPayload = payload;
-        callbackCount += 1;
-        lastCallbackStatus = payload && payload.completed === true ? 'final' : 'progress';
         res.statusCode = 200;
-        setCorsHeaders(req, res);
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
         const isFinal = payload && typeof payload === 'object' && (
           payload.ok === false
+          || payload.completed === true
           || (payload.result && payload.result.finished === true)
+          || hasResolvedAllSites(payload)
         );
-        const allSitesResolved = hasResolvedAllSites(payload);
-        const immediateFailure = allSitesResolved && payload.result.results.every((site) => site && String(site.status || '').toLowerCase() !== 'ok');
-        const stableResults = hasUsableStableResults(payload);
-        if (isFinal || immediateFailure) {
-          if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
-          stableCandidateTimer = null;
+        if (isFinal) {
           deferred.resolve(payload);
-        } else if (stableResults) {
-          const key = JSON.stringify(payload.result.results.map((site) => ({
-            siteName: site.siteName,
-            status: site.status,
-            content: site.content,
-            url: site.url
-          })));
-          if (key !== stableCandidateKey) {
-            stableCandidateKey = key;
-            if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
-            stableCandidateTimer = setTimeout(() => {
-              stableCandidateTimer = null;
-              deferred.resolve(lastPayload);
-            }, stableWindowMs);
-          }
         }
       } catch (error) {
         res.statusCode = 400;
@@ -515,24 +439,18 @@ async function createCallbackServer(timeoutMs) {
   const address = server.address();
   const port = address && typeof address === 'object' ? address.port : 0;
   const callbackUrl = `http://127.0.0.1:${port}/openclaw-callback/${token}`;
-  const bridgeCallbackUrl = `http://127.0.0.1:${port}/bridge-callback/${token}`;
   const timer = setTimeout(() => {
-    const details = callbackCount > 0
-      ? ` Received ${callbackCount} callback(s); last callback was ${lastCallbackStatus || 'unknown'} rather than final.`
-      : ' No callback reached the local Bridge callback server.';
-    deferred.reject(new Error(`${buildGuiCallbackTimeoutError(timeoutMs, lastPayload)}${details}`));
+    deferred.reject(new Error(buildGuiCallbackTimeoutError(timeoutMs, lastPayload)));
   }, timeoutMs + 10000);
 
   let closed = false;
   return {
     callbackUrl,
-    bridgeCallbackUrl,
     async waitForPayload() {
       try {
         return await deferred.promise;
       } finally {
         clearTimeout(timer);
-        if (stableCandidateTimer) clearTimeout(stableCandidateTimer);
         if (!closed) {
           closed = true;
           await new Promise((resolve) => server.close(() => resolve()));
@@ -554,25 +472,6 @@ function openUrlInBrowser(url, browserApp) {
 
   if (platform === 'darwin') {
     const appName = browserApp || 'Google Chrome';
-    // LaunchServices can reject chrome-extension:// URLs with -10820. Starting
-    // Chrome's executable directly lets the already-running browser process
-    // receive and route the URL instead.
-    if (url.startsWith('chrome-extension://')) {
-      const appCandidates = [
-        browserApp && browserApp.includes('/') ? browserApp : '',
-        `/Applications/${appName}.app/Contents/MacOS/${appName}`,
-        `${os.homedir()}/Applications/${appName}.app/Contents/MacOS/${appName}`,
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
-        '/Applications/Chromium.app/Contents/MacOS/Chromium'
-      ].filter(Boolean);
-      const executable = appCandidates.find((candidate) => fs.existsSync(candidate));
-      if (executable) {
-        const child = spawn(executable, [url], { detached: true, stdio: 'ignore' });
-        child.unref();
-        return;
-      }
-    }
     const args = ['-a', appName, url];
     const result = spawnSync('open', args, { stdio: 'ignore' });
     if (result.status !== 0) {
@@ -600,20 +499,6 @@ function openUrlInBrowser(url, browserApp) {
   }
 }
 
-function parseRunnerPayload(stdout) {
-  const text = String(stdout || '').trim();
-  if (!text) throw new Error('Runner returned empty output');
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    const firstObject = text.indexOf('{');
-    if (firstObject >= 0) {
-      return JSON.parse(text.slice(firstObject));
-    }
-    throw new Error('Runner output was not valid JSON');
-  }
-}
-
 async function runGuiMode(args, query, sites) {
   const explicitExtensionId = typeof args['extension-id'] === 'string' ? args['extension-id'].trim() : '';
   const extensionCandidates = getExtensionCandidates(explicitExtensionId);
@@ -638,12 +523,13 @@ async function runGuiMode(args, query, sites) {
   const shouldReadBack = openBrowser && !openOnly;
   const callbackServer = shouldReadBack ? await createCallbackServer(waitResultsMs) : null;
   const callbackParams = callbackServer
-    ? {
-      // v4.4.18 uses openclaw_callback; newer builds also accept
-      // bridge_callback. Both names must reach this local callback server.
-      openclaw_callback: callbackServer.callbackUrl,
-      bridge_callback: callbackServer.bridgeCallbackUrl
-    }
+    ? (source === 'workbuddy'
+      ? { bridge_callback: callbackServer.callbackUrl }
+      : {
+        // Existing callers still receive the original OpenClaw parameter.
+        openclaw_callback: callbackServer.callbackUrl,
+        bridge_callback: callbackServer.callbackUrl
+      })
     : {};
   const triggerUrl = buildExtensionUrl(
     extensionId,
@@ -923,6 +809,5 @@ module.exports = {
   runGuiMode,
   tryOpenExtensionPage,
   resolveExtensionPage,
-  parseRunnerPayload,
   main
 };

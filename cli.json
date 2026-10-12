@@ -1,0 +1,17 @@
+{
+  "runtime": {
+    "type": "node",
+    "version": "20"
+  },
+  "init": {
+    "darwin": "npm install -g ai-compare-cli",
+    "linux": "npm install -g ai-compare-cli",
+    "win32": "npm install -g ai-compare-cli"
+  },
+  "status": {
+    "darwin": "aicompare-webbridge status",
+    "linux": "aicompare-webbridge status",
+    "win32": "aicompare-webbridge.cmd status"
+  },
+  "statusMatch": "\\\"running\\\":true"
+}

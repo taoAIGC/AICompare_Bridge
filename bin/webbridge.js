@@ -12,18 +12,6 @@ const STATE_DIR = process.env.AICOMPARE_BRIDGE_HOME || path.join(os.homedir(), '
 const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
 const VERSION = '0.1.0';
-const MAX_TASKS = 100;
-const DEFAULT_EXTENSION_ID = 'dkhpgbbhlnmjbkihoeniojpkggkabbbl';
-const DEFAULT_EXTENSION_URL = 'https://chromewebstore.google.com/detail/dkhpgbbhlnmjbkihoeniojpkggkabbbl';
-
-// Agent hosts may inject an obsolete Node preload through NODE_OPTIONS. Keep
-// the bridge and its runner isolated from that host-specific setting while
-// preserving all other environment configuration (extension id, token, etc.).
-function childEnvironment() {
-  const env = { ...process.env };
-  delete env.NODE_OPTIONS;
-  return env;
-}
 
 function splitAddr(value) {
   const match = String(value || DEFAULT_ADDR).match(/^(.*):(\d+)$/);
@@ -47,13 +35,6 @@ function readPid() {
 function logLine(message) {
   ensureStateDir();
   fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${message}\n`);
-}
-
-function trimTasks(tasks) {
-  while (tasks.size > MAX_TASKS) {
-    const oldestTaskId = tasks.keys().next().value;
-    tasks.delete(oldestTaskId);
-  }
 }
 
 function json(res, status, payload) {
@@ -90,34 +71,15 @@ function readJson(req, limit = 1024 * 1024) {
   });
 }
 
-function parseRunnerPayload(stdout) {
-  const text = String(stdout || '').trim();
-  if (!text) throw new Error('Runner returned empty output');
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    const firstObject = text.indexOf('{');
-    if (firstObject >= 0) return JSON.parse(text.slice(firstObject));
-    throw new Error('Runner output was not valid JSON');
-  }
-}
-
 function runSearch(payload) {
   const runner = path.join(__dirname, 'runner.js');
   if (!fs.existsSync(runner)) throw new Error(`Runner is missing at ${runner}; reinstall AICompare WebBridge`);
-  // Keep the legacy OpenClaw trigger contract for older installed extensions.
-  // Newer extensions also understand this contract, while source/callback
-  // names can be overridden during compatibility testing.
-  const source = process.env.AICOMPARE_BRIDGE_SOURCE || 'openclaw';
-  const args = [runner, '--mode', 'gui', '--source', source, '--query', String(payload.query || '')];
+  const args = [runner, '--mode', 'gui', '--source', 'workbuddy', '--query', String(payload.query || '')];
   if (payload.sites) args.push('--sites', Array.isArray(payload.sites) ? payload.sites.join(',') : String(payload.sites));
   if (payload.timeout_ms) args.push('--wait-results-ms', String(payload.timeout_ms), '--timeout-ms', String(payload.timeout_ms));
   if (payload.extension_id) args.push('--extension-id', String(payload.extension_id));
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
-      env: childEnvironment(),
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
@@ -125,7 +87,7 @@ function runSearch(payload) {
     child.on('error', reject);
     child.on('close', (code) => {
       try {
-        const parsed = parseRunnerPayload(stdout);
+        const parsed = JSON.parse(stdout.trim().split('\n').pop() || '{}');
         if (code !== 0 || parsed.ok === false) reject(new Error(parsed.error || stderr || `runner exited with ${code}`));
         else resolve(parsed);
       } catch (error) {
@@ -152,14 +114,11 @@ function createServer(addr) {
         if (!String(payload.query || '').trim()) return json(res, 400, { ok: false, error: 'query is required' });
         const taskId = `task_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
         tasks.set(taskId, { taskId, status: 'running', createdAt: new Date().toISOString() });
-        trimTasks(tasks);
         active += 1;
         runSearch(payload).then((result) => {
           tasks.set(taskId, { taskId, status: 'completed', completedAt: new Date().toISOString(), result });
         }).catch((error) => {
-          const message = error && error.message ? error.message : String(error);
-          logLine(`task ${taskId} failed: ${message}`);
-          tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: message });
+          tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: error.message });
         }).finally(() => { active -= 1; });
         return json(res, 202, { ok: true, task_id: taskId, status: 'running', status_url: `/tasks/${taskId}` });
       } catch (error) { return json(res, 400, { ok: false, error: error.message }); }
@@ -177,11 +136,7 @@ function createServer(addr) {
 function start(addrValue = DEFAULT_ADDR, foreground = false) {
   if (!foreground) {
     ensureStateDir();
-    const child = require('child_process').spawn(process.execPath, [__filename, 'start', '--foreground', '--addr', addrValue], {
-      detached: true,
-      env: childEnvironment(),
-      stdio: 'ignore'
-    });
+    const child = require('child_process').spawn(process.execPath, [__filename, 'start', '--foreground', '--addr', addrValue], { detached: true, stdio: 'ignore' });
     child.unref();
     process.stdout.write(`AICompare WebBridge starting on http://${addrValue}\n`);
     return;
@@ -215,53 +170,6 @@ function requestJson(method, pathName, payload) {
   });
 }
 
-function chromeExtensionInstallations(extensionId = DEFAULT_EXTENSION_ID) {
-  const home = os.homedir();
-  const roots = process.platform === 'darwin'
-    ? [path.join(home, 'Library/Application Support/Google/Chrome'), path.join(home, 'Library/Application Support/Chromium'), path.join(home, 'Library/Application Support/Microsoft Edge')]
-    : process.platform === 'win32'
-      ? [path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data'), path.join(process.env.LOCALAPPDATA || '', 'Chromium/User Data'), path.join(process.env.LOCALAPPDATA || '', 'Microsoft/Edge/User Data')]
-      : [path.join(home, '.config/google-chrome'), path.join(home, '.config/chromium'), path.join(home, '.config/microsoft-edge')];
-  const found = [];
-  for (const root of roots) {
-    let profiles = [];
-    try {
-      profiles = fs.readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).filter((name) => name === 'Default' || /^Profile \d+$/i.test(name));
-    } catch (_) { continue; }
-    for (const profile of profiles) {
-      const extensionRoot = path.join(root, profile, 'Extensions', extensionId);
-      let versions = [];
-      try { versions = fs.readdirSync(extensionRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name); } catch (_) { continue; }
-      for (const version of versions) {
-        let manifest = {};
-        try { manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, version, 'manifest.json'), 'utf8')); } catch (_) {}
-        found.push({ browser: path.basename(root), profile, version: manifest.version || version, name: manifest.name || 'AI Compare' });
-      }
-    }
-  }
-  return found;
-}
-
-function check() {
-  const installations = chromeExtensionInstallations();
-  return requestJson('GET', '/status').then((status) => {
-    const payload = {
-      ok: true,
-      bridge: { running: status.running === true, version: VERSION, port: status.port },
-      extension: {
-        id: DEFAULT_EXTENSION_ID,
-        installed: installations.length > 0,
-        installations,
-        store_url: DEFAULT_EXTENSION_URL
-      },
-      next: installations.length > 0
-        ? '插件已安装。请确保 Chrome 使用的是列出的配置文件，并登录要查询的 AI 网站。'
-        : `未检测到正式版插件，请安装：${DEFAULT_EXTENSION_URL}`
-    };
-    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  });
-}
-
 async function search(args) {
   const queryIndex = args.indexOf('--query');
   const query = queryIndex >= 0 ? args[queryIndex + 1] : '';
@@ -289,7 +197,6 @@ async function cli() {
     return require('http').get(`http://${addr.host}:${addr.port}/status`, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => { process.stdout.write(`${b}\n`); }); }).on('error', () => { process.stdout.write(JSON.stringify({ ok: false, running: false }) + '\n'); process.exitCode = 1; });
   }
   if (command === 'stop') { const pid = readPid(); if (pid) process.kill(pid, 'SIGTERM'); return; }
-  if (command === 'check') return check();
   if (command === 'search') return search(rest);
   process.stdout.write('Usage: aicompare-webbridge start [--foreground] [--addr 127.0.0.1:10087]\n');
 }
