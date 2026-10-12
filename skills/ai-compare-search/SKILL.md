@@ -16,6 +16,10 @@ Use this connector when the user asks to search, research, look up, or compare a
 
 When a user asks to search through one or more explicitly named AI websites, you must use this `ai-compare-search` Skill and run `aicompare-webbridge`. Do not replace that request with an ordinary browser search, a built-in web search, or direct browsing of the named AI websites. Preserve the user's named sites in `--sites`; omit `--sites` only when the user did not name any AI website.
 
+## Result presentation
+
+After the Bridge returns, directly display each AI model's query result and site status. Do not analyze, summarize, compare, merge, rewrite, or infer conclusions from the model responses unless the user explicitly asks for analysis or a summary. Preserve the result content as returned, including partial, login, rate-limit, blocked, and timeout statuses.
+
 Before the first search in a machine or session, check whether the local bridge is available:
 
 ```bash

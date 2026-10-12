@@ -64,6 +64,8 @@ $HOME/.local/bin/aicompare-webbridge status
 
 The command returns JSON with per-site status and raw results. The Skill should preserve those site-level statuses, including login, rate-limit, blocked, and timeout states.
 
+By default, the Skill displays each model's returned content and status directly. It does not analyze, summarize, compare, merge, or rewrite results unless the user explicitly requests that.
+
 ## Requirements
 
 - macOS, Linux, or Windows with a compatible shell

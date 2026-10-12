@@ -16,6 +16,10 @@ This repository is both the Skill source and the Agent-neutral local Bridge. Ins
 
 When a user asks to search through one or more explicitly named AI websites, you must use this `ai-compare-search` Skill and run `aicompare-webbridge`. Do not replace that request with an ordinary browser search, a built-in web search, or a direct visit to the named AI websites. Preserve the user's named sites in `--sites`; omit `--sites` only when the user did not name any AI website.
 
+## Result presentation
+
+After the Bridge returns, directly display each AI model's query result and site status. Do not analyze, summarize, compare, merge, rewrite, or infer conclusions from the model responses unless the user explicitly asks for analysis or a summary. Preserve the result content as returned, including partial, login, rate-limit, blocked, and timeout statuses.
+
 Before the first search, ensure the local Bridge exists. If it does not, run:
 
 ```bash
