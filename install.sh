@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="${AICOMPARE_GITHUB_REPO:-taoAIGC/AICompare_Bridge}"
 REF="${AICOMPARE_GITHUB_REF:-main}"
-BASE="https://raw.githubusercontent.com/${REPO}/${REF}/AICompare%20Cli/bin"
+BASE="https://raw.githubusercontent.com/${REPO}/${REF}/bin"
 INSTALL_DIR="${AICOMPARE_BRIDGE_HOME:-$HOME/.aicompare-webbridge}"
 BIN_DIR="$INSTALL_DIR/bin"
 mkdir -p "$BIN_DIR"
