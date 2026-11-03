@@ -24,7 +24,7 @@ aicompare-webbridge search --query "<user query>" --sites "ChatGPT,Claude,Gemini
 - `--sites` is optional. Omit it unless the user explicitly named sites; the extension will use its configured defaults.
 - `--source` is optional and only labels the calling client (for example `codex`, `claude-code`, `workbuddy`). It does not change behavior, so pass your own name.
 - Use `--timeout-ms 190000` for queries expected to take longer than the default wait.
-- The command writes JSON to stdout. Display each model's raw result and status directly. Do not analyze, summarize, or merge the results unless the user explicitly asks for analysis or a summary.
+- The command writes JSON to stdout. For each model, display its returned answer (`content`) and its share URL (`shareUrl`). Do not analyze, summarize, or merge the results unless the user explicitly asks for analysis or a summary.
 
 ## Result fields
 
@@ -37,7 +37,18 @@ Each entry in `result.results[]` may include:
 
 The top-level `result` may also include `cloudShareUrl`, a shareable page that bundles this round's answers and source links. If it is empty, `cloudShareError` explains why (usually the relay is not configured).
 
-Show share links alongside each answer when present. Do not open or modify them.
+For every site, the reply must show the answer and its share URL, in this format:
+
+```
+### <siteName> (<status>)
+<content>
+分享链接 / Share URL: <shareUrl>
+```
+
+- If `shareUrl` is empty, write the share URL line as `（无）` and give the reason from `shareUrlSource`; never invent or guess a link.
+- If a site has no `content`, show its `status` / `error` instead of an answer.
+- If `cloudShareUrl` is present, add it at the end as the shareable page for the whole round.
+- Do not open or modify the links.
 
 The WebBridge daemon should be installed and running first. Check it with `aicompare-webbridge status`; if it is not running, run `aicompare-webbridge start` and retry.
 
