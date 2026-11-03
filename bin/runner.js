@@ -10,6 +10,9 @@ const { spawnSync } = require('child_process');
 let chromiumInstance = null;
 
 const DEFAULT_GUI_WAIT_RESULTS_MS = 90000;
+// 所有站点答完后，扩展还要点开分享弹层取各站点公开链接、再生成云端汇总页。
+// 默认等到一轮这样的预算，写进扩展的 URL 参数并额外加进回调等待时间。
+const DEFAULT_SHARE_BUDGET_MS = 20000;
 const DEFAULT_COMPARISON_TIMEOUT_MS = 60000;
 const DEFAULT_SITE_TIMEOUT_MS = 60000;
 const DEFAULT_EXTENSION_ID = 'dkhpgbbhlnmjbkihoeniojpkggkabbbl';
@@ -154,6 +157,10 @@ function buildExtensionUrl(extensionId, query, sites, extraParams = {}) {
   params.set('source', source);
   // Keep this legacy flag for existing OpenClaw integrations.
   if (source === 'openclaw') params.set('openclaw', '1');
+  // agent=1 是通用的"这次由 Agent 客户端发起"标记。
+  // source 只保留调用方名字（codex / claude-code / workbuddy …），不参与流程判断，
+  // 所以接入新客户端不需要再改扩展里的任何分支。
+  params.set('agent', '1');
   if (query) params.set('query', query);
   if (sites.length > 0) params.set('sites', sites.join(','));
   Object.entries(extraParams || {}).forEach(([key, value]) => {
@@ -367,6 +374,10 @@ function createDeferred() {
 function hasResolvedAllSites(payload) {
   const result = payload && payload.result;
   if (!result || typeof result !== 'object') return false;
+  // 新版扩展在站点跑完答案后还要点开分享弹层、生成云端汇总页，
+  // 那两步只在最终回调里才有结果。此时"所有站点都已 resolve"不代表可以收尾，
+  // 否则拿到的 payload 里永远缺 shareUrl / cloudShareUrl。
+  if (result.supportsShareLinks === true) return false;
   const totalSites = Number(result.totalSites);
   const resolvedSites = Number(result.resolvedSites);
   if (!Number.isFinite(totalSites) || totalSites <= 0) return false;
@@ -520,16 +531,20 @@ async function runGuiMode(args, query, sites) {
   const minChars = Math.max(1, asNumber(args['min-chars'], 20));
   const stableRounds = Math.max(0, asNumber(args['stable-rounds'], 2));
   const waitIframesMs = Math.max(0, asNumber(args['wait-iframes-ms'], 20000));
+  const shareBudgetMs = Math.max(0, asNumber(args['share-budget-ms'], DEFAULT_SHARE_BUDGET_MS));
   const shouldReadBack = openBrowser && !openOnly;
-  const callbackServer = shouldReadBack ? await createCallbackServer(waitResultsMs) : null;
+  // 分享采集发生在扩展侧所有站点答完之后，会额外占掉 shareBudgetMs，
+  // 回调服务器必须等得更久，否则子页还在点分享按钮这边就已经超时收尾了。
+  const callbackServer = shouldReadBack
+    ? await createCallbackServer(waitResultsMs + shareBudgetMs * 2)
+    : null;
+  // 扩展侧两个参数都认（bridge_callback / openclaw_callback），
+  // 这里统一都带上，不再按调用方名字分支。
   const callbackParams = callbackServer
-    ? (source === 'workbuddy'
-      ? { bridge_callback: callbackServer.callbackUrl }
-      : {
-        // Existing callers still receive the original OpenClaw parameter.
-        openclaw_callback: callbackServer.callbackUrl,
-        bridge_callback: callbackServer.callbackUrl
-      })
+    ? {
+      openclaw_callback: callbackServer.callbackUrl,
+      bridge_callback: callbackServer.callbackUrl
+    }
     : {};
   const triggerUrl = buildExtensionUrl(
     extensionId,
@@ -543,7 +558,10 @@ async function runGuiMode(args, query, sites) {
       openclaw_poll_ms: pollMs,
       openclaw_min_chars: minChars,
       openclaw_stable_rounds: stableRounds,
-      openclaw_wait_iframes_ms: waitIframesMs
+      openclaw_wait_iframes_ms: waitIframesMs,
+      // 给"点开分享弹层取链接 + 生成云端汇总页"留的预算。
+      // 这段发生在所有站点答完之后，所以要额外加在等回调的时间上。
+      openclaw_share_budget_ms: shareBudgetMs
     }
   );
   let openedBrowser = false;
@@ -692,6 +710,7 @@ function printUsage() {
     '  --min-chars <number>      Optional. Ready threshold for content length, default 20',
     '  --stable-rounds <number>  Optional. Stable rounds before finish, default 2',
     '  --wait-iframes-ms <num>   Optional. Wait for iframe initialization, default 20000',
+    '  --share-budget-ms <num>   Optional. Extra wait for site share links and the cloud summary link, default 20000',
     '  --help                    Show this help'
   ].join('\n');
 

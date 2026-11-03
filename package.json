@@ -1,29 +1,41 @@
 {
-  "name": "ai-compare-webbridge",
-  "version": "0.1.0",
-  "description": "Local browser bridge and Skill for AI Compare.",
+  "name": "ai-compare-cli",
+  "version": "0.2.0",
+  "description": "Run AI Compare browser searches from local agent runtimes.",
   "license": "GPL-3.0-or-later",
+  "author": "AI Compare",
   "type": "commonjs",
   "bin": {
-    "aicompare-webbridge": "bin/webbridge.js",
-    "ai-compare": "bin/ai-compare.js"
+    "ai-compare": "bin/ai-compare.js",
+    "aicompare-webbridge": "bin/webbridge.js"
   },
   "files": [
-    "bin",
-    "skills",
-    "references",
+    "bin/",
     "install.sh",
-    "README.md",
-    "SKILL.md",
+    "skills/",
+    "references/",
     "connector-meta.json",
     "cli.json",
     "icon.png",
+    "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "check": "node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/webbridge.js && node --check bin/install-daemon.js",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run check"
+  },
   "engines": {
     "node": ">=20"
   },
-  "scripts": {
-    "check": "node --check bin/webbridge.js && node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/install-daemon.js"
+  "keywords": [
+    "ai-compare",
+    "workbuddy",
+    "openclaw",
+    "hermes",
+    "chrome-extension"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

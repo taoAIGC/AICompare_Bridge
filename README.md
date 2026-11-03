@@ -30,13 +30,17 @@ Load this repository as an unpacked Chrome extension, then run:
 ai-compare --mode gui --source workbuddy --query "你好世界" --sites "ChatGPT,Gemini"
 ```
 
-For OpenClaw or Hermes compatibility, use the same command with `--source openclaw`. The opened extension URL uses `source=<caller>` and `bridge_callback`; legacy OpenClaw parameters remain supported.
+`--source` is only a caller label. Any agent runtime (Codex, Claude Code, WorkBuddy, Hermes, OpenClaw, …) can pass its own name. The opened extension URL always carries `agent=1`, which is what tells the extension this run came from an agent client — no per-client branching is needed inside the extension.
 
-For WorkBuddy/Codex, use the daemon command:
+For OpenClaw or Hermes compatibility, the same command works with `--source openclaw`. The opened extension URL also carries `bridge_callback` and the legacy `openclaw_callback`; both are read.
+
+For most agent runtimes, use the daemon command:
 
 ```bash
 aicompare-webbridge search --query "你好世界" --sites "ChatGPT,Gemini"
 ```
+
+The daemon accepts an optional `source` field in its `/command` payload to label the caller; it defaults to `webbridge`.
 
 ## Packaging note
 

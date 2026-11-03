@@ -11,7 +11,10 @@ const DEFAULT_ADDR = process.env.AICOMPARE_BRIDGE_ADDR || '127.0.0.1:10087';
 const STATE_DIR = process.env.AICOMPARE_BRIDGE_HOME || path.join(os.homedir(), '.aicompare-webbridge');
 const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
+// 与 runner.js 的 DEFAULT_SHARE_BUDGET_MS 保持一致：站点答完后扩展点分享弹层、
+// 生成云端汇总页所用的时间，守护进程轮询截止要把它算进去。
+const DEFAULT_SHARE_BUDGET_MS = 20000;
 
 function splitAddr(value) {
   const match = String(value || DEFAULT_ADDR).match(/^(.*):(\d+)$/);
@@ -74,7 +77,10 @@ function readJson(req, limit = 1024 * 1024) {
 function runSearch(payload) {
   const runner = path.join(__dirname, 'runner.js');
   if (!fs.existsSync(runner)) throw new Error(`Runner is missing at ${runner}; reinstall AICompare WebBridge`);
-  const args = [runner, '--mode', 'gui', '--source', 'workbuddy', '--query', String(payload.query || '')];
+  // source 只是调用方标签，不同 Agent 客户端可以在 /command 里自己传；
+  // 没传就统一记成 webbridge，不再固定写死 workbuddy。
+  const callerSource = String(payload.source || 'webbridge').trim() || 'webbridge';
+  const args = [runner, '--mode', 'gui', '--source', callerSource, '--query', String(payload.query || '')];
   if (payload.sites) args.push('--sites', Array.isArray(payload.sites) ? payload.sites.join(',') : String(payload.sites));
   if (payload.timeout_ms) args.push('--wait-results-ms', String(payload.timeout_ms), '--timeout-ms', String(payload.timeout_ms));
   if (payload.extension_id) args.push('--extension-id', String(payload.extension_id));
@@ -87,7 +93,15 @@ function runSearch(payload) {
     child.on('error', reject);
     child.on('close', (code) => {
       try {
-        const parsed = JSON.parse(stdout.trim().split('\n').pop() || '{}');
+        // runner 用 JSON.stringify(..., null, 2) 输出多行 JSON，
+        // 只取最后一行会拿到 "}"，解析必然失败。先整体解析，失败再退到最后一行。
+        const text = stdout.trim();
+        let parsed;
+        try {
+          parsed = JSON.parse(text || '{}');
+        } catch (_) {
+          parsed = JSON.parse(text.split('\n').pop() || '{}');
+        }
         if (code !== 0 || parsed.ok === false) reject(new Error(parsed.error || stderr || `runner exited with ${code}`));
         else resolve(parsed);
       } catch (error) {
@@ -173,13 +187,26 @@ function requestJson(method, pathName, payload) {
 async function search(args) {
   const queryIndex = args.indexOf('--query');
   const query = queryIndex >= 0 ? args[queryIndex + 1] : '';
-  if (!query) throw new Error('Usage: aicompare-webbridge search --query "..." [--sites "ChatGPT,Gemini"]');
+  if (!query) throw new Error('Usage: aicompare-webbridge search --query "..." [--sites "ChatGPT,Gemini"] [--source codex] [--extension-id <id>]');
   const sitesIndex = args.indexOf('--sites');
   const sites = sitesIndex >= 0 ? args[sitesIndex + 1] : '';
   const timeoutIndex = args.indexOf('--timeout-ms');
   const timeoutMs = timeoutIndex >= 0 ? Number(args[timeoutIndex + 1]) : 120000;
-  const started = await requestJson('POST', '/command', { query, sites, timeout_ms: timeoutMs });
-  const deadline = Date.now() + timeoutMs + 15000;
+  // 调用方名字只作标签，不影响流程；Codex / Claude Code 等各自传自己的名字即可。
+  const sourceIndex = args.indexOf('--source');
+  const source = sourceIndex >= 0 ? String(args[sourceIndex + 1] || '').trim() : '';
+  // 未打包加载的开发版扩展 id 和商店版不同，必须能显式指定，
+  // 否则 runner 只会去试商店那个 id，找不到就报"扩展未安装"。
+  const extensionIndex = args.indexOf('--extension-id');
+  const extensionId = extensionIndex >= 0 ? String(args[extensionIndex + 1] || '').trim() : '';
+  const started = await requestJson('POST', '/command', {
+    query, sites, timeout_ms: timeoutMs, source, extension_id: extensionId
+  });
+  // runner 在所有站点答完之后还要留时间点分享弹层、生成云端汇总页，
+  // 它的回调等待是 timeout + 2 份分享预算，这里的轮询截止必须比它更久，
+  // 否则守护进程先放弃，Agent 端永远拿不到最后那份带链接的结果。
+  const shareBudgetMs = DEFAULT_SHARE_BUDGET_MS;
+  const deadline = Date.now() + timeoutMs + shareBudgetMs * 2 + 15000;
   while (Date.now() < deadline) {
     const task = await requestJson('GET', started.status_url);
     if (task.status === 'completed') return process.stdout.write(`${JSON.stringify(task.result)}\n`);

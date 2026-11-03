@@ -7,7 +7,7 @@
   "description_en": "Run a query through the local AI Compare browser extension and return raw answers from selected AI sites.",
   "source": "ai-compare-browser-search",
   "type": "cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minWorkbuddyVersion": "5.0.0",
   "icon": "icon.png",
   "examples_zh": [

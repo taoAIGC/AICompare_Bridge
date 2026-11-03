@@ -1,6 +1,6 @@
 ---
 name: ai-compare-search
-version: 0.1.0
+version: 0.2.0
 display_name: 多AI 对比查询
 display_name_en: Multi-AI Comparison Search
 description: Query information from more than ten leading AI models at once and return their raw results, including ChatGPT, Gemini, Doubao, Grok, Claude, Qwen, DeepSeek, Yuanbao, and more.
@@ -17,13 +17,27 @@ Whenever the user requests a search on one or more specific AI websites, you mus
 Run:
 
 ```bash
-aicompare-webbridge search --query "<user query>" --sites "ChatGPT,Claude,Gemini"
+aicompare-webbridge search --query "<user query>" --sites "ChatGPT,Claude,Gemini" --source codex
 ```
 
 - `--query` is required and must contain the user's actual request.
 - `--sites` is optional. Omit it unless the user explicitly named sites; the extension will use its configured defaults.
-- Use `--wait-results-ms 190000` for queries expected to take longer than the default wait.
+- `--source` is optional and only labels the calling client (for example `codex`, `claude-code`, `workbuddy`). It does not change behavior, so pass your own name.
+- Use `--timeout-ms 190000` for queries expected to take longer than the default wait.
 - The command writes JSON to stdout. Display each model's raw result and status directly. Do not analyze, summarize, or merge the results unless the user explicitly asks for analysis or a summary.
+
+## Result fields
+
+Each entry in `result.results[]` may include:
+
+- `siteName`, `status`, `content`, `error` — the answer and its state.
+- `url` — the site's session URL.
+- `shareUrl` — the site's own public share link, when the extension could generate one. May be empty; `isPublicShare` tells you whether it is a real share link.
+- `shareUrlSource` — `site` when `shareUrl` was collected, otherwise the reason it was not.
+
+The top-level `result` may also include `cloudShareUrl`, a shareable page that bundles this round's answers and source links. If it is empty, `cloudShareError` explains why (usually the relay is not configured).
+
+Show share links alongside each answer when present. Do not open or modify them.
 
 The WebBridge daemon should be installed and running first. Check it with `aicompare-webbridge status`; if it is not running, run `aicompare-webbridge start` and retry.
 
