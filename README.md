@@ -42,6 +42,22 @@ aicompare-webbridge search --query "你好世界" --sites "ChatGPT,Gemini"
 
 The daemon accepts an optional `source` field in its `/command` payload to label the caller; it defaults to `webbridge`.
 
+## Create a task
+
+Create a one-time task that starts immediately:
+
+```bash
+aicompare-webbridge task create --query "北京天气" --sites "豆包,元宝" --mode immediate
+```
+
+Create a daily task at a local clock time:
+
+```bash
+aicompare-webbridge task create --query "北京天气" --sites "豆包,元宝" --mode scheduled --time 09:00
+```
+
+The command opens the extension's task page and returns only after the extension confirms that it saved the task. Scheduled tasks use the extension's existing alarm scheduler and the computer's local time zone; Chrome must be running when they are due. Immediate tasks run once after saving.
+
 ## Packaging note
 
 The WorkBuddy Connector assets are `connector-meta.json`, `cli.json`, `skills/`, and `icon.png`. They are packaged with the npm CLI. Before submitting to the WorkBuddy Connector market, publish the npm package and then upload this directory as the Connector asset bundle.

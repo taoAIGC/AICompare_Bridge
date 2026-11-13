@@ -26,6 +26,20 @@ aicompare-webbridge search --query "<user query>" --sites "ChatGPT,Claude,Gemini
 - Use `--timeout-ms 190000` for queries expected to take longer than the default wait.
 - The command writes JSON to stdout. For each model, display its returned answer (`content`) and its share URL (`shareUrl`). Do not analyze, summarize, or merge the results unless the user explicitly asks for analysis or a summary.
 
+## Create a Task
+
+When the user asks AI Compare to run a query immediately or on a schedule, create it through the Bridge so the extension stores and executes the task:
+
+```bash
+aicompare-webbridge task create --query "<user query>" --sites "ChatGPT,Gemini" --mode immediate
+aicompare-webbridge task create --query "<user query>" --sites "ChatGPT,Gemini" --mode scheduled --time 09:00
+```
+
+- `--sites` must name one or more models enabled in the user's extension.
+- `--mode immediate` saves the task and starts one run immediately.
+- `--mode scheduled` creates a task that runs daily at `HH:MM` in the computer's local time zone. The browser must be running for the extension alarm to execute it.
+- The command waits for the extension to confirm the task was saved and prints the created task record. Report the selected mode and local run time to the user.
+
 ## Result fields
 
 Each entry in `result.results[]` may include:

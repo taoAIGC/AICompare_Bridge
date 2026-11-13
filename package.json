@@ -1,6 +1,6 @@
 {
   "name": "ai-compare-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Run AI Compare browser searches from local agent runtimes.",
   "license": "GPL-3.0-or-later",
   "author": "AI Compare",
@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/webbridge.js && node --check bin/install-daemon.js",
+    "check": "node --check bin/runner.js && node --check bin/ai-compare.js && node --check bin/webbridge.js && node --check bin/install-daemon.js && node --test tests/*.test.js",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "npm run check"
   },

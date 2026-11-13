@@ -11,10 +11,11 @@ const DEFAULT_ADDR = process.env.AICOMPARE_BRIDGE_ADDR || '127.0.0.1:10087';
 const STATE_DIR = process.env.AICOMPARE_BRIDGE_HOME || path.join(os.homedir(), '.aicompare-webbridge');
 const PID_PATH = path.join(STATE_DIR, 'daemon.pid');
 const LOG_PATH = path.join(STATE_DIR, 'daemon.log');
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 // 与 runner.js 的 DEFAULT_SHARE_BUDGET_MS 保持一致：站点答完后扩展点分享弹层、
 // 生成云端汇总页所用的时间，守护进程轮询截止要把它算进去。
 const DEFAULT_SHARE_BUDGET_MS = 20000;
+const DEFAULT_EXTENSION_ID = 'dkhpgbbhlnmjbkihoeniojpkggkabbbl';
 
 function splitAddr(value) {
   const match = String(value || DEFAULT_ADDR).match(/^(.*):(\d+)$/);
@@ -111,11 +112,71 @@ function runSearch(payload) {
   });
 }
 
-function createServer(addr) {
+function runTaskCreate(payload, callbackUrl) {
+  const runner = path.join(__dirname, 'runner.js');
+  if (!fs.existsSync(runner)) throw new Error(`Runner is missing at ${runner}; reinstall AICompare WebBridge`);
+  const args = [runner, '--mode', 'task-create', '--task-json', JSON.stringify(payload), '--callback-url', callbackUrl];
+  if (payload.extension_id) args.push('--extension-id', String(payload.extension_id));
+  if (payload.browser_app) args.push('--browser-app', String(payload.browser_app));
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      try {
+        const parsed = JSON.parse(stdout.trim() || '{}');
+        if (code !== 0 || parsed.ok === false) reject(new Error(parsed.error || stderr || `runner exited with ${code}`));
+        else resolve(parsed);
+      } catch (error) {
+        reject(new Error(`Invalid task runner response: ${error.message}; ${stderr}`));
+      }
+    });
+  });
+}
+
+function createServer(addr, dependencies = {}) {
   let active = 0;
   const tasks = new Map();
+  const taskCallbacks = new Map();
   const startedAt = Date.now();
   const server = http.createServer(async (req, res) => {
+    const callbackMatch = new URL(req.url, `http://${addr.host}:${addr.port}`).pathname.match(/^\/task-callback\/([a-f0-9-]+)$/i);
+    if (callbackMatch && req.method === 'OPTIONS') {
+      const origin = String(req.headers.origin || '');
+      if (!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) return json(res, 403, { ok: false, error: 'invalid extension origin' });
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '300',
+        'Vary': 'Origin'
+      });
+      return res.end();
+    }
+    if (callbackMatch && req.method === 'POST') {
+      const origin = String(req.headers.origin || '');
+      if (!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) return json(res, 403, { ok: false, error: 'invalid extension origin' });
+      const nonce = callbackMatch[1];
+      const taskId = taskCallbacks.get(nonce);
+      if (!taskId) return json(res, 404, { ok: false, error: 'task callback not found' });
+      try {
+        const payload = await readJson(req, 64 * 1024);
+        const existing = tasks.get(taskId);
+        if (existing?.status === 'pending') {
+          tasks.set(taskId, payload?.ok === true
+            ? { ...existing, status: 'completed', completedAt: new Date().toISOString(), task: payload.task }
+            : { ...existing, status: 'error', completedAt: new Date().toISOString(), error: String(payload?.error || 'Task creation failed') });
+        }
+        taskCallbacks.delete(nonce);
+        res.writeHead(200, { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Vary': 'Origin', 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
     if (!tokenMatches(req)) return json(res, 401, { ok: false, error: 'Unauthorized' });
     const url = new URL(req.url, `http://${addr.host}:${addr.port}`);
     if (req.method === 'GET' && url.pathname === '/status') {
@@ -135,6 +196,33 @@ function createServer(addr) {
           tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: error.message });
         }).finally(() => { active -= 1; });
         return json(res, 202, { ok: true, task_id: taskId, status: 'running', status_url: `/tasks/${taskId}` });
+      } catch (error) { return json(res, 400, { ok: false, error: error.message }); }
+    }
+    if (req.method === 'POST' && url.pathname === '/task-command') {
+      try {
+        const payload = await readJson(req);
+        const query = String(payload.query || '').trim();
+        const models = Array.isArray(payload.models)
+          ? payload.models.map((value) => String(value || '').trim()).filter(Boolean)
+          : String(payload.sites || '').split(',').map((value) => value.trim()).filter(Boolean);
+        const runMode = payload.run_mode === 'immediate' ? 'immediate' : 'scheduled';
+        const time = String(payload.time || '').trim();
+        if (!query) return json(res, 400, { ok: false, error: 'query is required' });
+        if (!models.length) return json(res, 400, { ok: false, error: 'at least one model is required' });
+        if (runMode === 'scheduled' && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(time)) return json(res, 400, { ok: false, error: 'scheduled tasks require local time in HH:MM format' });
+        const taskId = `task_${crypto.randomUUID()}`;
+        const nonce = crypto.randomUUID();
+        const task = { id: taskId, query, models, runMode, time: runMode === 'scheduled' ? time : '', sendEmail: false, email: '', enabled: true };
+        tasks.set(taskId, { taskId, status: 'pending', createdAt: new Date().toISOString() });
+        taskCallbacks.set(nonce, taskId);
+        const callbackPort = Number(server.address()?.port) || addr.port;
+        const callbackUrl = `http://127.0.0.1:${callbackPort}/task-callback/${nonce}`;
+        const create = dependencies.runTaskCreate || runTaskCreate;
+        create({ ...task, extension_id: payload.extension_id, browser_app: payload.browser_app }, callbackUrl).catch((error) => {
+          taskCallbacks.delete(nonce);
+          tasks.set(taskId, { taskId, status: 'error', completedAt: new Date().toISOString(), error: error.message });
+        });
+        return json(res, 202, { ok: true, task_id: taskId, status: 'pending', status_url: `/tasks/${taskId}` });
       } catch (error) { return json(res, 400, { ok: false, error: error.message }); }
     }
     const taskMatch = url.pathname.match(/^\/tasks\/([^/]+)$/);
@@ -216,6 +304,31 @@ async function search(args) {
   throw new Error('Timed out waiting for AICompare WebBridge task');
 }
 
+async function createTask(args) {
+  const queryIndex = args.indexOf('--query');
+  const query = queryIndex >= 0 ? String(args[queryIndex + 1] || '').trim() : '';
+  const sitesIndex = args.indexOf('--sites');
+  const sites = sitesIndex >= 0 ? args[sitesIndex + 1] : '';
+  const modeIndex = args.indexOf('--mode');
+  const runMode = modeIndex >= 0 ? String(args[modeIndex + 1] || '').trim() : 'scheduled';
+  const timeIndex = args.indexOf('--time');
+  const time = timeIndex >= 0 ? String(args[timeIndex + 1] || '').trim() : '';
+  const extensionIndex = args.indexOf('--extension-id');
+  const extensionId = extensionIndex >= 0 ? String(args[extensionIndex + 1] || '').trim() : DEFAULT_EXTENSION_ID;
+  if (!query) throw new Error('Usage: aicompare-webbridge task create --query "..." --sites "ChatGPT,Gemini" --mode immediate|scheduled [--time HH:MM]');
+  if (!['immediate', 'scheduled'].includes(runMode)) throw new Error('--mode must be immediate or scheduled');
+  if (runMode === 'scheduled' && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('Scheduled mode requires --time HH:MM (daily, local time)');
+  const started = await requestJson('POST', '/task-command', { query, sites, run_mode: runMode, time, extension_id: extensionId });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    const task = await requestJson('GET', started.status_url);
+    if (task.status === 'completed') return process.stdout.write(`${JSON.stringify(task)}\n`);
+    if (task.status === 'error') throw new Error(task.error || 'Task creation failed');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('Timed out waiting for AI Compare to save the task. Keep the extension task page open and retry.');
+}
+
 async function cli() {
   const [command = 'help', ...rest] = process.argv.slice(2);
   if (command === 'start') return start(rest.find((v, i) => rest[i - 1] === '--addr') || DEFAULT_ADDR, rest.includes('--foreground'));
@@ -225,7 +338,10 @@ async function cli() {
   }
   if (command === 'stop') { const pid = readPid(); if (pid) process.kill(pid, 'SIGTERM'); return; }
   if (command === 'search') return search(rest);
-  process.stdout.write('Usage: aicompare-webbridge start [--foreground] [--addr 127.0.0.1:10087]\n');
+  if (command === 'task' && rest[0] === 'create') return createTask(rest.slice(1));
+  process.stdout.write('Usage: aicompare-webbridge start [--foreground] [--addr 127.0.0.1:10087]\n       aicompare-webbridge task create --query "..." --sites "ChatGPT,Gemini" --mode immediate|scheduled [--time HH:MM]\n');
 }
 
 if (require.main === module) cli().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
+
+module.exports = { createServer, validateTaskCreateRequest: (payload) => payload, buildTaskCreateCommand: runTaskCreate };

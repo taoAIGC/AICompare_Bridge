@@ -170,6 +170,47 @@ function buildExtensionUrl(extensionId, query, sites, extraParams = {}) {
   return `chrome-extension://${extensionId}/iframe/iframe.html?${params.toString()}`;
 }
 
+function buildScheduledTaskUrl(extensionId, task, callbackUrl) {
+  const params = new URLSearchParams({
+    bridge_task: JSON.stringify(task),
+    bridge_callback: String(callbackUrl || '')
+  });
+  return `chrome-extension://${extensionId}/scheduler/tasks.html?${params.toString()}`;
+}
+
+function validateTaskCreateRequest(raw) {
+  const query = String(raw?.query || '').trim();
+  const models = uniqueStrings(Array.isArray(raw?.models) ? raw.models : parseSites(raw?.sites || ''));
+  const runMode = raw?.runMode === 'immediate' ? 'immediate' : 'scheduled';
+  const time = String(raw?.time || '').trim();
+  if (!query) throw new Error('Missing required task query');
+  if (!models.length) throw new Error('At least one model is required (use --sites)');
+  if (runMode === 'scheduled' && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(time)) {
+    throw new Error('Scheduled tasks require --time HH:MM in local time');
+  }
+  return {
+    id: String(raw?.id || `task_${crypto.randomUUID()}`),
+    query,
+    models,
+    runMode,
+    time: runMode === 'scheduled' ? time : '',
+    sendEmail: false,
+    email: '',
+    enabled: true
+  };
+}
+
+async function runTaskCreateMode(args) {
+  const extensionId = getPrimaryExtensionId(args['extension-id']);
+  if (!extensionId) throw new Error('No extension id available. Pass --extension-id or set AI_COMPARE_EXTENSION_ID.');
+  const task = validateTaskCreateRequest(JSON.parse(String(args['task-json'] || '{}')));
+  const callbackUrl = String(args['callback-url'] || '');
+  if (!callbackUrl) throw new Error('Missing task callback URL');
+  const url = buildScheduledTaskUrl(extensionId, task, callbackUrl);
+  openUrlInBrowser(url, args['browser-app']);
+  return { ok: true, extensionId, extensionUrl: url, taskId: task.id };
+}
+
 function getPrimaryExtensionId(explicitExtensionId) {
   const [primary] = getExtensionCandidates(explicitExtensionId);
   return primary || '';
@@ -724,12 +765,13 @@ async function main() {
     return;
   }
 
-  const query = typeof args.query === 'string' ? args.query.trim() : '';
-  if (!query) {
-    throw new Error('Missing required --query');
-  }
-
   const mode = typeof args.mode === 'string' ? args.mode.trim().toLowerCase() : 'gui';
+  if (mode === 'task-create') {
+    process.stdout.write(`${JSON.stringify(await runTaskCreateMode(args), null, 2)}\n`);
+    return;
+  }
+  const query = typeof args.query === 'string' ? args.query.trim() : '';
+  if (!query) throw new Error('Missing required --query');
   const sites = parseSites(args.sites || '');
 
   if (mode === 'gui') {
@@ -812,6 +854,8 @@ module.exports = {
   parseSites,
   uniqueStrings,
   buildExtensionUrl,
+  buildScheduledTaskUrl,
+  validateTaskCreateRequest,
   getPrimaryExtensionId,
   getExtensionCandidates,
   parseRemoteDebuggingPort,
@@ -826,6 +870,7 @@ module.exports = {
   getGuiModeNotes,
   openUrlInBrowser,
   runGuiMode,
+  runTaskCreateMode,
   tryOpenExtensionPage,
   resolveExtensionPage,
   main
